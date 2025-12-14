@@ -73,7 +73,11 @@ export default function RoomPage() {
   // --- Player state ---
   const [activeVideo, setActiveVideo] = useState<{ videoId: string; startSeconds: number } | null>(null)
   const [audioConsent, setAudioConsent] = useState(false)
-  const playbackRequestRef = useRef<{ videoId: string; startSeconds: number } | null>(null)
+  const playbackRequestRef = useRef<{ videoId: string; startSeconds: number; startedAt: number } | null>(null)
+  const playbackMetaRef = useRef<{ videoId: string | null; startedAt: number | null }>({
+    videoId: null,
+    startedAt: null,
+  })
 
   const queuePlayback = useCallback((song: Song, startedAt?: number) => {
     const videoId = extractVideoId(song)
@@ -81,9 +85,20 @@ export default function RoomPage() {
       console.error('Unable to determine video ID for', song)
       return
     }
-    const payload = { videoId, startSeconds: computeStartSeconds(startedAt) }
+    const safeStart = startedAt || Date.now()
+    const last = playbackMetaRef.current
+    if (last.videoId === videoId && last.startedAt === safeStart) {
+      setIsPlaying(true)
+      return
+    }
+    const payload = {
+      videoId,
+      startSeconds: computeStartSeconds(safeStart),
+      startedAt: safeStart,
+    }
+    playbackMetaRef.current = { videoId, startedAt: safeStart }
     if (audioConsent) {
-      setActiveVideo(payload)
+      setActiveVideo({ videoId: payload.videoId, startSeconds: payload.startSeconds })
       playbackRequestRef.current = null
     } else {
       playbackRequestRef.current = payload
@@ -169,6 +184,7 @@ export default function RoomPage() {
           queuePlayback(data.currentSong, data.playingFrom)
         } else {
           playbackRequestRef.current = null
+          playbackMetaRef.current = { videoId: null, startedAt: null }
           setActiveVideo(null)
           setIsPlaying(false)
         }
@@ -219,7 +235,9 @@ export default function RoomPage() {
 
   useEffect(() => {
     if (audioConsent && playbackRequestRef.current) {
-      setActiveVideo(playbackRequestRef.current)
+      const { videoId, startSeconds, startedAt } = playbackRequestRef.current
+      playbackMetaRef.current = { videoId, startedAt }
+      setActiveVideo({ videoId, startSeconds })
       playbackRequestRef.current = null
     }
   }, [audioConsent])
@@ -306,23 +324,34 @@ export default function RoomPage() {
               <h3 className="font-bold text-lg text-white mb-3">Queue ({queue.length})</h3>
               {queue.length === 0 ? (
                 <div className="bg-white/5 rounded-3xl p-8 text-center text-white/60 border border-white/10">
-                  <div className="text-4xl mb-2">�</div>
+                  <div className="text-4xl mb-2">🎧</div>
                   <p>Waiting for host to add songs...</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {queue.map((song, idx) => {
-                    const isCurrent = currentSong?.id === song.id || (!currentSong && idx === 0)
+                    const isCurrent = currentSong?.id === song.id
                     return (
-                      <div key={song.id} className={`flex items-center gap-3 p-3 rounded-2xl transition-colors border border-white/5 ${isCurrent ? 'bg-white/10' : 'bg-slate-900/40'}`}>
-                        <div className="text-lg font-bold w-10 text-center text-white/80">
-                          {isCurrent ? '▶️' : idx}
+                      <div
+                        key={song.id}
+                        className={`flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-2xl border transition-colors ${
+                          isCurrent
+                            ? 'bg-gradient-to-r from-purple-700/30 to-indigo-700/20 border-purple-400/40 shadow-lg'
+                            : 'bg-slate-900/40 border-white/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 text-sm text-white/70">
+                          <span className="text-lg font-bold w-8 text-center">
+                            {isCurrent ? '▶️' : idx + 1}
+                          </span>
+                          <span className="text-xs uppercase tracking-wide px-2 py-1 rounded-full bg-white/5">
+                            {song.duration || 'N/A'}
+                          </span>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-semibold text-white truncate">{song.title}</div>
                           <div className="text-sm text-white/60 truncate">{song.author}</div>
                         </div>
-                        <div className="text-sm text-white/50 flex-shrink-0">{song.duration || 'N/A'}</div>
                       </div>
                     )
                   })}

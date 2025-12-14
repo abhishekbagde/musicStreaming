@@ -18,19 +18,22 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: radial-gradient(circle at top, rgba(103,80,164,0.35), transparent 45%),
+    radial-gradient(circle at bottom, rgba(72,0,255,0.25), transparent 40%),
+    linear-gradient(180deg, #05060b 0%, #0f051e 50%, #05060b 100%);
   min-height: 100vh;
-  color: #1f2937;
+  color: #e5e7ff;
 }
 
 .glass {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.75);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 60px rgba(2, 6, 23, 0.65);
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #c084fc, #7c3aed);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

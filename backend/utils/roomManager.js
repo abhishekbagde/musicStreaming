@@ -22,8 +22,10 @@ class RoomManager {
       },
       queue: [], // Playlist queue: array of song objects
       currentSong: null, // Currently playing song object
+      currentSongIndex: -1,
       isPlaying: false,
       playingFrom: null,
+      resumeMs: 0,
     }
     this.rooms[roomId] = room
     this.userSessions[hostId] = { roomId, isHost: true, username: 'Host' }
@@ -40,8 +42,31 @@ class RoomManager {
   removeSongFromQueue(roomId, songId) {
     const room = this.rooms[roomId]
     if (!room) return { success: false, error: 'Room not found' }
-    room.queue = room.queue.filter((song) => song.id !== songId)
-    return { success: true, queue: room.queue }
+    const index = room.queue.findIndex((song) => song.id === songId)
+    if (index === -1) {
+      return { success: false, error: 'Song not found' }
+    }
+
+    const [removed] = room.queue.splice(index, 1)
+    const wasCurrent = room.currentSongIndex === index
+
+    if (wasCurrent) {
+      room.currentSong = null
+      room.currentSongIndex = -1
+      room.isPlaying = false
+      room.playingFrom = null
+      room.resumeMs = 0
+    } else if (room.currentSongIndex > index) {
+      room.currentSongIndex -= 1
+    }
+
+    return {
+      success: true,
+      queue: room.queue,
+      removed,
+      removedIndex: index,
+      removedCurrent: wasCurrent,
+    }
   }
 
   getQueue(roomId) {
@@ -50,10 +75,17 @@ class RoomManager {
     return room.queue
   }
 
-  setCurrentSong(roomId, song) {
+  setCurrentSong(roomId, song, index = null) {
     const room = this.rooms[roomId]
     if (!room) return { success: false, error: 'Room not found' }
     room.currentSong = song
+    if (song) {
+      const inferredIndex = index ?? room.queue.findIndex((s) => s.id === song.id)
+      room.currentSongIndex = inferredIndex
+    } else {
+      room.currentSongIndex = -1
+    }
+    room.resumeMs = 0
     return { success: true, currentSong: song }
   }
 
@@ -61,6 +93,70 @@ class RoomManager {
     const room = this.rooms[roomId]
     if (!room) return null
     return room.currentSong
+  }
+
+  setCurrentSongByIndex(roomId, index) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    if (index < 0 || index >= room.queue.length) {
+      room.currentSong = null
+      room.currentSongIndex = -1
+      room.resumeMs = 0
+      return { success: false, error: 'Invalid song index' }
+    }
+    const song = room.queue[index]
+    room.currentSong = song
+    room.currentSongIndex = index
+    room.resumeMs = 0
+    return { success: true, currentSong: song }
+  }
+
+  getCurrentSongIndex(roomId) {
+    const room = this.rooms[roomId]
+    if (!room) return -1
+    return typeof room.currentSongIndex === 'number' ? room.currentSongIndex : -1
+  }
+
+  playNextSong(roomId) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    if (room.queue.length === 0) return { success: false, error: 'Queue is empty' }
+
+    const currentIndex = room.currentSongIndex
+    const nextIndex = currentIndex === -1 ? 0 : currentIndex + 1
+
+    if (nextIndex >= room.queue.length) {
+      this.setCurrentSong(roomId, null)
+      return { success: true, song: null, index: -1, ended: true }
+    }
+
+    const song = room.queue[nextIndex]
+    this.setCurrentSong(roomId, song, nextIndex)
+    return { success: true, song, index: nextIndex }
+  }
+
+  playPreviousSong(roomId) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    if (room.queue.length === 0) return { success: false, error: 'Queue is empty' }
+
+    const currentIndex = room.currentSongIndex
+    let prevIndex = currentIndex === -1 ? 0 : currentIndex - 1
+    if (prevIndex < 0) prevIndex = 0
+
+    const song = room.queue[prevIndex]
+    this.setCurrentSong(roomId, song, prevIndex)
+    return { success: true, song, index: prevIndex }
+  }
+
+  playSongById(roomId, songId) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    const index = room.queue.findIndex((song) => song.id === songId)
+    if (index === -1) return { success: false, error: 'Song not found' }
+    const song = room.queue[index]
+    this.setCurrentSong(roomId, song, index)
+    return { success: true, song, index }
   }
 
   joinRoom(roomId, userId, username) {
@@ -149,15 +245,45 @@ class RoomManager {
     const room = this.rooms[roomId]
     if (!room) return
     room.isPlaying = playing
-    room.playingFrom = playing ? (startedAt || Date.now()) : null
+    if (playing) {
+      room.playingFrom = startedAt || Date.now()
+      room.resumeMs = 0
+    } else {
+      room.playingFrom = null
+    }
   }
 
   getPlaybackState(roomId) {
     const room = this.rooms[roomId]
     if (!room) {
-      return { playing: false, playingFrom: null }
+      return { playing: false, playingFrom: null, resumeMs: 0 }
     }
-    return { playing: room.isPlaying || false, playingFrom: room.playingFrom || null }
+    return {
+      playing: room.isPlaying || false,
+      playingFrom: room.playingFrom || null,
+      resumeMs: room.resumeMs || 0,
+    }
+  }
+
+  pausePlayback(roomId) {
+    const room = this.rooms[roomId]
+    if (!room || !room.playingFrom) return 0
+    const elapsed = Date.now() - room.playingFrom
+    room.resumeMs = elapsed
+    room.isPlaying = false
+    room.playingFrom = null
+    return elapsed
+  }
+
+  resumePlayback(roomId) {
+    const room = this.rooms[roomId]
+    if (!room || !room.currentSong) return null
+    const resumeMs = room.resumeMs || 0
+    const startedAt = Date.now() - resumeMs
+    room.isPlaying = true
+    room.playingFrom = startedAt
+    room.resumeMs = 0
+    return startedAt
   }
 
   getUserSession(userId) {

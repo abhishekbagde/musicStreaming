@@ -71,9 +71,13 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
-    // Set the first song in queue as current
-    const currentSong = queue[0]
-    roomManager.setCurrentSong(roomId, currentSong)
+    const currentIndex = roomManager.getCurrentSongIndex(roomId)
+    const startIndex = currentIndex >= 0 && currentIndex < queue.length ? currentIndex : 0
+    const { success, currentSong } = roomManager.setCurrentSongByIndex(roomId, startIndex)
+    if (!success || !currentSong) {
+      socket.emit('error', { message: 'Unable to start playback' })
+      return
+    }
     const startedAt = Date.now()
     roomManager.setPlaybackState(roomId, true, startedAt)
 
@@ -109,25 +113,164 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
-    // Remove current song and set next as current
-    roomManager.removeSongFromQueue(roomId, queue[0].id)
-    const updatedQueue = roomManager.getQueue(roomId)
-    const nextSong = updatedQueue.length > 0 ? updatedQueue[0] : null
-
-    roomManager.setCurrentSong(roomId, nextSong)
-    let playingFrom = null
-    if (nextSong) {
-      playingFrom = Date.now()
-      roomManager.setPlaybackState(roomId, true, playingFrom)
-    } else {
-      roomManager.setPlaybackState(roomId, false)
+    const result = roomManager.playNextSong(roomId)
+    if (!result.success) {
+      socket.emit('error', { message: result.error || 'Unable to skip song' })
+      return
     }
 
-    // Broadcast to all users in room
+    const updatedQueue = roomManager.getQueue(roomId)
+    if (!result.song) {
+      roomManager.setPlaybackState(roomId, false)
+      io.to(roomId).emit('playlist:update', {
+        queue: updatedQueue,
+        currentSong: null,
+        playing: false,
+        playingFrom: null,
+      })
+      return
+    }
+
+    const playingFrom = Date.now()
+    roomManager.setPlaybackState(roomId, true, playingFrom)
+
     io.to(roomId).emit('playlist:update', {
       queue: updatedQueue,
-      currentSong: nextSong,
-      playing: nextSong ? true : false,
+      currentSong: result.song,
+      playing: true,
+      playingFrom,
+    })
+  })
+
+  // Handle pausing current song
+  socket.on('song:pause', (data) => {
+    const { roomId } = data
+    const room = roomManager.getRoom(roomId)
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' })
+      return
+    }
+
+    if (room.hostId !== socket.id) {
+      socket.emit('error', { message: 'Only host can pause songs' })
+      return
+    }
+
+    if (!roomManager.getCurrentSong(roomId)) {
+      socket.emit('error', { message: 'No song is currently playing' })
+      return
+    }
+
+    const pausedMs = roomManager.pausePlayback(roomId)
+
+    io.to(roomId).emit('playlist:update', {
+      queue: roomManager.getQueue(roomId),
+      currentSong: roomManager.getCurrentSong(roomId),
+      playing: false,
+      playingFrom: pausedMs,
+    })
+  })
+
+  socket.on('song:resume', (data) => {
+    const { roomId } = data
+    const room = roomManager.getRoom(roomId)
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' })
+      return
+    }
+
+    if (room.hostId !== socket.id) {
+      socket.emit('error', { message: 'Only host can resume songs' })
+      return
+    }
+
+    if (!roomManager.getCurrentSong(roomId)) {
+      socket.emit('error', { message: 'No song to resume' })
+      return
+    }
+
+    const startedAt = roomManager.resumePlayback(roomId)
+    if (!startedAt) {
+      socket.emit('error', { message: 'Unable to resume playback' })
+      return
+    }
+
+    io.to(roomId).emit('playlist:update', {
+      queue: roomManager.getQueue(roomId),
+      currentSong: roomManager.getCurrentSong(roomId),
+      playing: true,
+      playingFrom: startedAt,
+    })
+  })
+
+  socket.on('song:previous', (data) => {
+    const { roomId } = data
+    const room = roomManager.getRoom(roomId)
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' })
+      return
+    }
+
+    if (room.hostId !== socket.id) {
+      socket.emit('error', { message: 'Only host can go to previous song' })
+      return
+    }
+
+    const queue = roomManager.getQueue(roomId)
+    if (queue.length === 0) {
+      socket.emit('error', { message: 'Queue is empty' })
+      return
+    }
+
+    const result = roomManager.playPreviousSong(roomId)
+    if (!result.success || !result.song) {
+      socket.emit('error', { message: result.error || 'Unable to play previous song' })
+      return
+    }
+
+    const playingFrom = Date.now()
+    roomManager.setPlaybackState(roomId, true, playingFrom)
+
+    io.to(roomId).emit('playlist:update', {
+      queue,
+      currentSong: result.song,
+      playing: true,
+      playingFrom,
+    })
+  })
+
+  socket.on('song:playSpecific', (data) => {
+    const { roomId, songId } = data
+    const room = roomManager.getRoom(roomId)
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' })
+      return
+    }
+
+    if (room.hostId !== socket.id) {
+      socket.emit('error', { message: 'Only host can choose songs' })
+      return
+    }
+
+    const queue = roomManager.getQueue(roomId)
+    if (queue.length === 0) {
+      socket.emit('error', { message: 'Queue is empty' })
+      return
+    }
+
+    const result = roomManager.playSongById(roomId, songId)
+    if (!result.success || !result.song) {
+      socket.emit('error', { message: result.error || 'Unable to play that song' })
+      return
+    }
+
+    const playingFrom = Date.now()
+    roomManager.setPlaybackState(roomId, true, playingFrom)
+
+    io.to(roomId).emit('playlist:update', {
+      queue,
+      currentSong: result.song,
+      playing: true,
       playingFrom,
     })
   })

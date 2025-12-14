@@ -74,6 +74,10 @@ export default function BroadcastPage() {
 
   // --- Refs ---
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const playbackMetaRef = useRef<{ videoId: string | null; startedAt: number | null }>({
+    videoId: null,
+    startedAt: null,
+  })
   const [activeVideo, setActiveVideo] = useState<{ videoId: string; startSeconds: number } | null>(null)
 
   // --- Scroll to bottom for chat ---
@@ -123,14 +127,25 @@ export default function BroadcastPage() {
         if (data.playing && data.currentSong) {
           const videoId = extractVideoId(data.currentSong)
           if (videoId) {
-            setActiveVideo({ videoId, startSeconds: computeStartSeconds(data.playingFrom) })
+            const startedAt = data.playingFrom || Date.now()
+            const last = playbackMetaRef.current
             setIsPlaying(true)
+            if (last.videoId === videoId && last.startedAt === startedAt) {
+              return
+            }
+            playbackMetaRef.current = { videoId, startedAt }
+            setActiveVideo({
+              videoId,
+              startSeconds: computeStartSeconds(startedAt),
+            })
           } else {
             console.error('Unable to determine video ID for', data.currentSong)
+            playbackMetaRef.current = { videoId: null, startedAt: null }
             setActiveVideo(null)
             setIsPlaying(false)
           }
         } else {
+          playbackMetaRef.current = { videoId: null, startedAt: null }
           setActiveVideo(null)
           setIsPlaying(false)
         }
@@ -204,16 +219,35 @@ export default function BroadcastPage() {
     console.log('➖ Song removed:', songId)
   }
 
-  const handlePlayNext = () => {
-    if (!roomId || !isHost) return
-    socket.emit('song:play', { roomId })
-    console.log('▶️ Playing next song')
-  }
-
   const handleSkip = () => {
     if (!roomId || !isHost) return
     socket.emit('song:skip', { roomId })
     console.log('⏭️ Skipped to next song')
+  }
+
+  const handlePrevious = () => {
+    if (!roomId || !isHost) return
+    socket.emit('song:previous', { roomId })
+    console.log('⏮️ Went to previous song')
+  }
+
+  const handlePlaySpecific = (songId: string) => {
+    if (!roomId || !isHost) return
+    socket.emit('song:playSpecific', { roomId, songId })
+    console.log('🎯 Playing requested song:', songId)
+  }
+
+  const handleTogglePlayback = () => {
+    if (!roomId || !isHost) return
+    if (isPlaying) {
+      socket.emit('song:pause', { roomId })
+      return
+    }
+    if (currentSong) {
+      socket.emit('song:resume', { roomId })
+    } else {
+      socket.emit('song:play', { roomId })
+    }
   }
 
   // --- Chat Handler ---
@@ -228,21 +262,21 @@ export default function BroadcastPage() {
 
   if (!roomId) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 flex items-center justify-center px-4">
-        <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">
+      <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-900 to-slate-900 flex items-center justify-center px-4">
+        <div className="bg-slate-900/85 border border-white/10 rounded-3xl shadow-2xl p-8 max-w-md w-full text-white">
+          <h1 className="text-3xl font-bold mb-6 gradient-text">
             🎤 Start Broadcasting
           </h1>
 
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <div className="bg-red-500/20 border border-red-400/30 text-red-100 px-4 py-3 rounded-2xl mb-4">
               {error}
             </div>
           )}
 
           <form onSubmit={handleCreateRoom} className="space-y-4">
             <div>
-              <label className="block text-gray-700 font-bold mb-2">
+              <label className="block text-sm uppercase tracking-widest text-white/70 font-semibold mb-2">
                 Room Name
               </label>
               <input
@@ -250,12 +284,12 @@ export default function BroadcastPage() {
                 value={roomName}
                 onChange={(e) => setRoomName(e.target.value)}
                 placeholder="e.g., My Music Night"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full px-4 py-3 border border-white/10 rounded-2xl bg-white/5 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-400"
               />
             </div>
             <button
               type="submit"
-              className="w-full bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors"
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-3 px-4 rounded-2xl hover:opacity-90 transition shadow-lg"
             >
               Create Room
             </button>
@@ -266,7 +300,7 @@ export default function BroadcastPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-2 sm:p-4">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-900 text-white p-2 sm:p-6">
       {activeVideo && (
         <iframe
           key={`${activeVideo.videoId}-${activeVideo.startSeconds}`}
@@ -282,8 +316,8 @@ export default function BroadcastPage() {
         {/* Main Area */}
         <div className="md:col-span-2 space-y-4 sm:space-y-6">
           {/* --- YouTube Search & Playlist UI --- */}
-          <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-6">
+            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
               <span>🎵</span> <span>Music Queue</span>
             </h2>
 
@@ -295,11 +329,11 @@ export default function BroadcastPage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search YouTube..."
-                  className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-base"
+                  className="flex-1 px-4 py-3 border border-white/10 rounded-2xl bg-white/5 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400 text-base"
                 />
                 <button
                   type="submit"
-                  className="bg-purple-600 text-white px-6 py-3 rounded-xl hover:bg-purple-700 font-bold transition-colors text-base"
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3 rounded-2xl font-semibold transition shadow-lg text-base"
                 >
                   🔍 Search
                 </button>
@@ -308,26 +342,26 @@ export default function BroadcastPage() {
 
             {/* Search Results Dropdown */}
             {searchResults.length > 0 && (
-              <div className="mb-6 border border-gray-200 rounded-2xl overflow-hidden">
-                <div className="bg-gray-50 px-4 py-2 border-b font-semibold text-sm">Search Results</div>
-                <ul className="max-h-72 overflow-y-auto">
+              <div className="mb-6 border border-white/10 rounded-2xl overflow-hidden bg-slate-950/60">
+                <div className="px-4 py-2 border-b border-white/5 font-semibold text-sm text-white/70">Search Results</div>
+                <ul className="max-h-72 overflow-y-auto divide-y divide-white/5">
                   {searchResults.map((song) => (
-                    <li key={song.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors p-3">
+                    <li key={song.id} className="hover:bg-white/5 transition-colors p-3">
                       <div className="flex items-start gap-3">
                         {song.thumbnail && (
-                          <img src={song.thumbnail} alt="thumbnail" className="w-14 h-14 rounded object-cover flex-shrink-0" />
+                          <img src={song.thumbnail} alt="thumbnail" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
                         )}
                         <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-gray-800 truncate">{song.title}</div>
-                          <div className="text-sm text-gray-500 truncate">{song.author}</div>
-                          <div className="text-xs text-gray-400">{song.duration || 'N/A'}</div>
+                          <div className="font-semibold text-white truncate">{song.title}</div>
+                          <div className="text-sm text-white/60 truncate">{song.author}</div>
+                          <div className="text-xs text-white/50">{song.duration || 'N/A'}</div>
                         </div>
                         <button
                           onClick={() => {
                             handleAddSong(song)
                             setSearchResults([]) // Close dropdown after adding
                           }}
-                          className="bg-green-500 text-white px-4 py-2 rounded-xl hover:bg-green-600 text-sm font-bold flex-shrink-0 whitespace-nowrap"
+                          className="bg-emerald-500 text-slate-950 px-4 py-2 rounded-2xl font-bold flex-shrink-0 whitespace-nowrap"
                         >
                           + Add
                         </button>
@@ -341,24 +375,30 @@ export default function BroadcastPage() {
             {/* Now Playing */}
             {nowPlaying && (
               <div className="mb-6">
-                <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-2xl p-5 sm:p-6 text-white shadow-lg">
-                  <div className="text-sm font-semibold mb-2">NOW PLAYING</div>
+                <div className="bg-gradient-to-r from-purple-600 to-indigo-700 rounded-3xl p-5 sm:p-6 text-white shadow-2xl border border-white/10">
+                  <div className="text-sm font-semibold tracking-wider mb-2 text-white/70">NOW PLAYING</div>
                   <div className="text-2xl font-bold mb-2 truncate">{nowPlaying.title}</div>
-                  <div className="text-purple-100 mb-4 truncate">{nowPlaying.author}</div>
-                  
+                  <div className="text-white/80 mb-4 truncate">{nowPlaying.author}</div>
+
                   {isHost && (
-                    <div className="flex gap-3">
+                    <div className="flex flex-col sm:flex-row gap-3">
                       <button
-                        onClick={handlePlayNext}
-                        className="bg-white text-purple-600 px-6 py-2 rounded-xl font-bold hover:bg-indigo-50 transition-colors flex-1"
+                        onClick={handlePrevious}
+                        className="bg-purple-900/70 text-white px-6 py-2 rounded-2xl font-semibold hover:bg-purple-800 transition flex-1"
                       >
-                        ▶️ Play
+                        ⏮️ Previous
+                      </button>
+                      <button
+                        onClick={handleTogglePlayback}
+                        className="bg-white/90 text-purple-700 px-6 py-2 rounded-2xl font-semibold hover:bg-white transition flex-1"
+                      >
+                        {isPlaying ? '⏸️ Pause' : currentSong ? '▶️ Resume' : '▶️ Play'}
                       </button>
                       <button
                         onClick={handleSkip}
-                        className="bg-purple-700 text-white px-6 py-2 rounded-xl font-bold hover:bg-purple-800 transition-colors flex-1"
+                        className="bg-purple-900/70 text-white px-6 py-2 rounded-2xl font-semibold hover:bg-purple-800 transition flex-1"
                       >
-                        ⏭️ Skip
+                        ⏭️ Next
                       </button>
                     </div>
                   )}
@@ -368,34 +408,57 @@ export default function BroadcastPage() {
 
             {/* Playlist Queue */}
             <div>
-              <h3 className="font-bold text-lg text-gray-800 mb-3">Queue ({queue.length})</h3>
+              <h3 className="font-bold text-lg text-white mb-3">Queue ({queue.length})</h3>
               {queue.length === 0 ? (
-                <div className="bg-gray-50 rounded-2xl p-8 text-center text-gray-500">
+                <div className="bg-white/5 rounded-3xl p-8 text-center text-white/60 border border-white/10">
                   <div className="text-4xl mb-2">🎵</div>
                   <p>No songs in queue yet. Search and add some!</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {queue.map((song, idx) => {
-                    const isCurrent = currentSong?.id === song.id || (!currentSong && idx === 0)
+                    const isCurrent = currentSong?.id === song.id
                     return (
-                      <div key={song.id} className={`flex items-center gap-3 p-3 rounded-2xl transition-colors ${isCurrent ? 'bg-purple-50 border-2 border-purple-500' : 'bg-gray-50 hover:bg-gray-100'}`}>
-                        <div className="text-lg font-bold w-10 text-center">
-                          {isCurrent ? '▶️' : idx}
+                      <div
+                        key={song.id}
+                        className={`flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-2xl border transition-colors ${
+                          isCurrent
+                            ? 'bg-gradient-to-r from-purple-700/30 to-indigo-700/20 border-purple-400/40 shadow-lg'
+                            : 'bg-slate-900/40 border-white/5 hover:bg-slate-900/70'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 text-sm text-white/70">
+                          <span className="text-lg font-bold w-8 text-center">
+                            {isCurrent ? '▶️' : idx + 1}
+                          </span>
+                          <span className="text-xs uppercase tracking-wide px-2 py-1 rounded-full bg-white/5">
+                            {song.duration || 'N/A'}
+                          </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-gray-800 truncate">{song.title}</div>
-                          <div className="text-sm text-gray-500 truncate">{song.author}</div>
+                          <div className="font-semibold text-white truncate">{song.title}</div>
+                          <div className="text-sm text-white/60 truncate">{song.author}</div>
                         </div>
-                        <div className="text-sm text-gray-400 flex-shrink-0">{song.duration || 'N/A'}</div>
                         {isHost && (
-                          <button
-                            onClick={() => handleRemoveSong(song.id)}
-                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-xl transition-colors flex-shrink-0"
-                          title="Remove"
-                        >
-                          ✕
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handlePlaySpecific(song.id)}
+                              className={`px-3 py-2 rounded-2xl text-sm font-semibold transition ${
+                                isCurrent
+                                  ? 'bg-white text-purple-700'
+                                  : 'bg-emerald-500/90 text-slate-950 hover:bg-emerald-400'
+                              }`}
+                            >
+                              ▶ Play
+                            </button>
+                            <button
+                              onClick={() => handleRemoveSong(song.id)}
+                              className="bg-red-500/80 hover:bg-red-500 text-white px-3 py-2 rounded-2xl transition"
+                              title="Remove"
+                            >
+                              ✕
+                            </button>
+                          </div>
                         )}
                       </div>
                     )
