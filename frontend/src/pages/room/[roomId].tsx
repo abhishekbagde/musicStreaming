@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { socket } from '@/utils/socketClient'
 
@@ -72,6 +72,8 @@ export default function RoomPage() {
 
   // --- Hidden player ---
   const [activeVideo, setActiveVideo] = useState<{ videoId: string; startSeconds: number } | null>(null)
+  const [audioConsent, setAudioConsent] = useState(false)
+  const pendingVideoRef = useRef<{ videoId: string; startSeconds: number } | null>(null)
 
   // --- Socket.io Listeners ---
   useEffect(() => {
@@ -145,7 +147,12 @@ export default function RoomPage() {
         if (data.playing && data.currentSong) {
           const videoId = extractVideoId(data.currentSong)
           if (videoId) {
-            setActiveVideo({ videoId, startSeconds: computeStartSeconds(data.playingFrom) })
+            const payload = { videoId, startSeconds: computeStartSeconds(data.playingFrom) }
+            if (audioConsent) {
+              setActiveVideo(payload)
+            } else {
+              pendingVideoRef.current = payload
+            }
             setIsPlaying(true)
           } else {
             console.error('Unable to determine video ID for', data.currentSong)
@@ -154,6 +161,7 @@ export default function RoomPage() {
           }
         } else {
           setActiveVideo(null)
+          pendingVideoRef.current = null
           setIsPlaying(false)
         }
       }
@@ -183,7 +191,14 @@ export default function RoomPage() {
       socket.off('room:closed')
       socket.emit('room:leave')
     }
-  }, [roomId, router])
+  }, [audioConsent, roomId, router])
+
+  useEffect(() => {
+    if (audioConsent && pendingVideoRef.current) {
+      setActiveVideo(pendingVideoRef.current)
+      pendingVideoRef.current = null
+    }
+  }, [audioConsent])
 
   // --- Chat Handler ---
   const handleSendMessage = (e: React.FormEvent) => {
@@ -221,6 +236,23 @@ export default function RoomPage() {
           className="absolute w-0 h-0 overflow-hidden pointer-events-none"
           aria-hidden="true"
         />
+      )}
+      {!audioConsent && (
+        <div className="fixed inset-x-0 top-0 z-10 bg-yellow-100 text-yellow-900 text-center py-3 px-4 shadow">
+          <span>🔊 Tap the button to start listening:</span>
+          <button
+            className="ml-3 bg-yellow-500 text-white font-semibold px-4 py-1 rounded"
+            onClick={() => {
+              setAudioConsent(true)
+              if (pendingVideoRef.current) {
+                setActiveVideo(pendingVideoRef.current)
+                pendingVideoRef.current = null
+              }
+            }}
+          >
+            Enable Audio
+          </button>
+        </div>
       )}
       
       <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
