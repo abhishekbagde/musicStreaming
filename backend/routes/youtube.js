@@ -51,11 +51,14 @@ router.get('/audio', async (req, res) => {
       filter: 'audioonly',
       quality: 'highestaudio',
       highWaterMark: 1 << 25,
+      dlChunkSize: 0, // avoid 410 errors on chunked downloads
       requestOptions: {
         headers: {
           // Pretend to be a browser to avoid throttling
           'User-Agent':
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+          Referer: 'https://www.youtube.com/',
+          Origin: 'https://www.youtube.com',
         },
       },
     });
