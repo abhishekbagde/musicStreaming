@@ -25,6 +25,13 @@ interface Participant {
   isHost: boolean
 }
 
+declare global {
+  interface Window {
+    YT?: any
+    onYouTubeIframeAPIReady?: () => void
+  }
+}
+
 const extractVideoId = (song: Song | null) => {
   if (!song) return null
   if (song.id && /^[a-zA-Z0-9_-]{8,15}$/.test(song.id)) {
@@ -70,18 +77,48 @@ export default function RoomPage() {
   const [isConnected, setIsConnected] = useState(false)
   const [isLive, setIsLive] = useState(false)
 
-  // --- Hidden player ---
-  const [activeVideo, setActiveVideo] = useState<{ videoId: string; startSeconds: number } | null>(null)
+  // --- Player state ---
+  const playerRef = useRef<any>(null)
+  const [playerReady, setPlayerReady] = useState(false)
   const [audioConsent, setAudioConsent] = useState(false)
-  const pendingVideoRef = useRef<{ videoId: string; startSeconds: number } | null>(null)
+  const playbackRequestRef = useRef<{ song: Song; startedAt?: number } | null>(null)
+
+  const playSongNow = useCallback((song: Song, startedAt?: number) => {
+    if (!playerRef.current) return false
+    const videoId = extractVideoId(song)
+    if (!videoId) {
+      console.error('Missing video ID', song)
+      return false
+    }
+    const startSeconds = computeStartSeconds(startedAt)
+    try {
+      playerRef.current.loadVideoById({ videoId, startSeconds })
+      playerRef.current.playVideo()
+      setIsPlaying(true)
+      return true
+    } catch (err) {
+      console.error('Failed to start YouTube playback', err)
+      return false
+    }
+  }, [])
+
+  const queuePlayback = useCallback((song: Song, startedAt?: number) => {
+    if (audioConsent && playerReady && playerRef.current) {
+      const success = playSongNow(song, startedAt)
+      if (!success) {
+        playbackRequestRef.current = { song, startedAt }
+      } else {
+        playbackRequestRef.current = null
+      }
+    } else {
+      playbackRequestRef.current = { song, startedAt }
+    }
+    setIsPlaying(true)
+  }, [audioConsent, playSongNow, playerReady])
 
   const enableAudio = useCallback(() => {
     if (audioConsent) return
     setAudioConsent(true)
-    if (pendingVideoRef.current) {
-      setActiveVideo(pendingVideoRef.current)
-      pendingVideoRef.current = null
-    }
   }, [audioConsent])
 
   // --- Socket.io Listeners ---
@@ -154,23 +191,12 @@ export default function RoomPage() {
 
       if (typeof data.playing === 'boolean') {
         if (data.playing && data.currentSong) {
-          const videoId = extractVideoId(data.currentSong)
-          if (videoId) {
-            const payload = { videoId, startSeconds: computeStartSeconds(data.playingFrom) }
-            if (audioConsent) {
-              setActiveVideo(payload)
-            } else {
-              pendingVideoRef.current = payload
-            }
-            setIsPlaying(true)
-          } else {
-            console.error('Unable to determine video ID for', data.currentSong)
-            setActiveVideo(null)
-            setIsPlaying(false)
-          }
+          queuePlayback(data.currentSong, data.playingFrom)
         } else {
-          setActiveVideo(null)
-          pendingVideoRef.current = null
+          playbackRequestRef.current = null
+          if (playerRef.current?.stopVideo) {
+            playerRef.current.stopVideo()
+          }
           setIsPlaying(false)
         }
       }
@@ -200,7 +226,7 @@ export default function RoomPage() {
       socket.off('room:closed')
       socket.emit('room:leave')
     }
-  }, [audioConsent, roomId, router])
+  }, [queuePlayback, roomId, router])
 
   useEffect(() => {
     if (audioConsent) return
@@ -217,6 +243,61 @@ export default function RoomPage() {
       window.removeEventListener('click', handleFirstInteraction)
     }
   }, [audioConsent, enableAudio])
+
+  useEffect(() => {
+    if (!audioConsent) return
+
+    const createPlayer = () => {
+      if (playerRef.current || !window.YT?.Player) return
+      playerRef.current = new window.YT.Player('guest-youtube-player', {
+        height: '1',
+        width: '1',
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          rel: 0,
+          modestbranding: 1,
+          playsinline: 1,
+        },
+        events: {
+          onReady: () => setPlayerReady(true),
+        },
+      })
+    }
+
+    if (window.YT && window.YT.Player) {
+      createPlayer()
+    } else {
+      window.onYouTubeIframeAPIReady = () => {
+        window.onYouTubeIframeAPIReady = undefined
+        createPlayer()
+      }
+      if (!document.getElementById('youtube-iframe-api')) {
+        const tag = document.createElement('script')
+        tag.src = 'https://www.youtube.com/iframe_api'
+        tag.id = 'youtube-iframe-api'
+        document.body.appendChild(tag)
+      }
+    }
+
+    return () => {
+      window.onYouTubeIframeAPIReady = undefined
+      if (playerRef.current?.destroy) {
+        playerRef.current.destroy()
+        playerRef.current = null
+      }
+      setPlayerReady(false)
+    }
+  }, [audioConsent])
+
+  useEffect(() => {
+    if (!audioConsent || !playerReady || !playerRef.current) return
+    if (playbackRequestRef.current) {
+      const { song, startedAt } = playbackRequestRef.current
+      playbackRequestRef.current = null
+      playSongNow(song, startedAt)
+    }
+  }, [audioConsent, playerReady, playSongNow])
 
   // --- Chat Handler ---
   const handleSendMessage = (e: React.FormEvent) => {
@@ -244,17 +325,12 @@ export default function RoomPage() {
   const nowPlaying = currentSong || (queue.length > 0 ? queue[0] : null)
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-4">
-      {activeVideo && (
-        <iframe
-          key={`${activeVideo.videoId}-${activeVideo.startSeconds}`}
-          title="YouTube listener player"
-          src={`https://www.youtube.com/embed/${activeVideo.videoId}?autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1&start=${activeVideo.startSeconds}`}
-          allow="autoplay; encrypted-media"
-          className="absolute w-0 h-0 overflow-hidden pointer-events-none"
-          aria-hidden="true"
-        />
-      )}
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-2 sm:p-4">
+      <div
+        id="guest-youtube-player"
+        className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none"
+        aria-hidden="true"
+      />
       {!audioConsent && (
         <div className="fixed inset-x-0 bottom-0 md:top-0 md:bottom-auto z-10 px-4 pb-6 pt-2 pointer-events-none">
           <div className="max-w-md mx-auto bg-yellow-100 text-yellow-900 rounded-xl shadow-lg p-4 flex flex-col gap-3 pointer-events-auto">
@@ -275,17 +351,19 @@ export default function RoomPage() {
         </div>
       )}
       
-      <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
+      <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-4 sm:gap-6">
         {/* Main Player Area */}
-        <div className="md:col-span-2 space-y-6">
+        <div className="md:col-span-2 space-y-4 sm:space-y-6">
           {/* Music Queue Card */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">🎵 Music Queue</h2>
+          <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <span>🎵</span> <span>Music Queue</span>
+            </h2>
 
             {/* Now Playing */}
             {nowPlaying && (
               <div className="mb-6">
-                <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg p-6 text-white">
+                <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-2xl p-5 sm:p-6 text-white shadow-lg">
                   <div className="text-sm font-semibold mb-2">NOW PLAYING</div>
                   <div className="text-2xl font-bold mb-2 truncate">{nowPlaying.title}</div>
                   <div className="text-purple-100 mb-4 truncate">{nowPlaying.author}</div>
@@ -297,7 +375,7 @@ export default function RoomPage() {
             <div>
               <h3 className="font-bold text-lg text-gray-800 mb-3">Queue ({queue.length})</h3>
               {queue.length === 0 ? (
-                <div className="bg-gray-50 rounded-lg p-8 text-center text-gray-500">
+                <div className="bg-gray-50 rounded-2xl p-8 text-center text-gray-500">
                   <div className="text-4xl mb-2">�</div>
                   <p>Waiting for host to add songs...</p>
                 </div>
@@ -306,8 +384,8 @@ export default function RoomPage() {
                   {queue.map((song, idx) => {
                     const isCurrent = currentSong?.id === song.id || (!currentSong && idx === 0)
                     return (
-                      <div key={song.id} className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${isCurrent ? 'bg-purple-100 border-2 border-purple-500' : 'bg-gray-50 hover:bg-gray-100'}`}>
-                        <div className="text-lg font-bold w-8 text-center">
+                      <div key={song.id} className={`flex items-center gap-3 p-3 rounded-2xl transition-colors ${isCurrent ? 'bg-purple-50 border-2 border-purple-500' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                        <div className="text-lg font-bold w-10 text-center">
                           {isCurrent ? '▶️' : idx}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -342,7 +420,7 @@ export default function RoomPage() {
         </div>
 
         {/* Chat Sidebar */}
-        <div className="bg-white rounded-lg shadow-lg p-6 flex flex-col h-[600px] md:h-[700px]">
+        <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 flex flex-col h-auto md:h-[700px]">
           <h2 className="text-xl font-bold text-gray-800 mb-4">💬 Chat</h2>
 
           {/* Messages */}

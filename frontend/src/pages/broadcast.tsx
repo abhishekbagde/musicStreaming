@@ -266,38 +266,40 @@ export default function BroadcastPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-2 sm:p-4">
       {activeVideo && (
         <iframe
           key={`${activeVideo.videoId}-${activeVideo.startSeconds}`}
           title="YouTube audio player"
           src={`https://www.youtube.com/embed/${activeVideo.videoId}?autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1&start=${activeVideo.startSeconds}`}
           allow="autoplay; encrypted-media"
-          className="absolute w-0 h-0 overflow-hidden pointer-events-none"
+          className="absolute w-[1px] h-[1px] overflow-hidden pointer-events-none opacity-0"
           aria-hidden="true"
         />
       )}
       
-      <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
+      <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-4 sm:gap-6">
         {/* Main Area */}
-        <div className="md:col-span-2 space-y-6">
+        <div className="md:col-span-2 space-y-4 sm:space-y-6">
           {/* --- YouTube Search & Playlist UI --- */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">🎵 Music Queue</h2>
+          <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <span>🎵</span> <span>Music Queue</span>
+            </h2>
 
             {/* Search Bar */}
             <form onSubmit={handleYouTubeSearch} className="mb-6">
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-3 sm:flex-row">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search YouTube..."
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-base"
                 />
                 <button
                   type="submit"
-                  className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 font-bold transition-colors"
+                  className="bg-purple-600 text-white px-6 py-3 rounded-xl hover:bg-purple-700 font-bold transition-colors text-base"
                 >
                   🔍 Search
                 </button>
@@ -306,7 +308,7 @@ export default function BroadcastPage() {
 
             {/* Search Results Dropdown */}
             {searchResults.length > 0 && (
-              <div className="mb-6 border border-gray-200 rounded-lg overflow-hidden">
+              <div className="mb-6 border border-gray-200 rounded-2xl overflow-hidden">
                 <div className="bg-gray-50 px-4 py-2 border-b font-semibold text-sm">Search Results</div>
                 <ul className="max-h-72 overflow-y-auto">
                   {searchResults.map((song) => (
@@ -325,7 +327,7 @@ export default function BroadcastPage() {
                             handleAddSong(song)
                             setSearchResults([]) // Close dropdown after adding
                           }}
-                          className="bg-green-500 text-white px-3 py-2 rounded hover:bg-green-600 text-sm font-bold flex-shrink-0 whitespace-nowrap"
+                          className="bg-green-500 text-white px-4 py-2 rounded-xl hover:bg-green-600 text-sm font-bold flex-shrink-0 whitespace-nowrap"
                         >
                           + Add
                         </button>
@@ -339,7 +341,7 @@ export default function BroadcastPage() {
             {/* Now Playing */}
             {nowPlaying && (
               <div className="mb-6">
-                <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg p-6 text-white">
+                <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-2xl p-5 sm:p-6 text-white shadow-lg">
                   <div className="text-sm font-semibold mb-2">NOW PLAYING</div>
                   <div className="text-2xl font-bold mb-2 truncate">{nowPlaying.title}</div>
                   <div className="text-purple-100 mb-4 truncate">{nowPlaying.author}</div>
@@ -348,13 +350,13 @@ export default function BroadcastPage() {
                     <div className="flex gap-3">
                       <button
                         onClick={handlePlayNext}
-                        className="bg-white text-purple-600 px-6 py-2 rounded font-bold hover:bg-gray-100 transition-colors flex-1"
+                        className="bg-white text-purple-600 px-6 py-2 rounded-xl font-bold hover:bg-indigo-50 transition-colors flex-1"
                       >
                         ▶️ Play
                       </button>
                       <button
                         onClick={handleSkip}
-                        className="bg-purple-700 text-white px-6 py-2 rounded font-bold hover:bg-purple-800 transition-colors flex-1"
+                        className="bg-purple-700 text-white px-6 py-2 rounded-xl font-bold hover:bg-purple-800 transition-colors flex-1"
                       >
                         ⏭️ Skip
                       </button>
@@ -368,7 +370,7 @@ export default function BroadcastPage() {
             <div>
               <h3 className="font-bold text-lg text-gray-800 mb-3">Queue ({queue.length})</h3>
               {queue.length === 0 ? (
-                <div className="bg-gray-50 rounded-lg p-8 text-center text-gray-500">
+                <div className="bg-gray-50 rounded-2xl p-8 text-center text-gray-500">
                   <div className="text-4xl mb-2">🎵</div>
                   <p>No songs in queue yet. Search and add some!</p>
                 </div>
@@ -377,8 +379,8 @@ export default function BroadcastPage() {
                   {queue.map((song, idx) => {
                     const isCurrent = currentSong?.id === song.id || (!currentSong && idx === 0)
                     return (
-                      <div key={song.id} className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${isCurrent ? 'bg-purple-100 border-2 border-purple-500' : 'bg-gray-50 hover:bg-gray-100'}`}>
-                        <div className="text-lg font-bold w-8 text-center">
+                      <div key={song.id} className={`flex items-center gap-3 p-3 rounded-2xl transition-colors ${isCurrent ? 'bg-purple-50 border-2 border-purple-500' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                        <div className="text-lg font-bold w-10 text-center">
                           {isCurrent ? '▶️' : idx}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -389,10 +391,10 @@ export default function BroadcastPage() {
                         {isHost && (
                           <button
                             onClick={() => handleRemoveSong(song.id)}
-                            className="bg-red-500 hover:bg-red-600 text-white p-2 rounded transition-colors flex-shrink-0"
-                            title="Remove"
-                          >
-                            ✕
+                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-xl transition-colors flex-shrink-0"
+                          title="Remove"
+                        >
+                          ✕
                           </button>
                         )}
                       </div>
@@ -403,7 +405,7 @@ export default function BroadcastPage() {
             </div>
           </div>
           {/* Room Info */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold text-gray-800">🎤 Room</h2>
               <div className="text-sm text-gray-500">ID: {roomId?.slice(-8)}</div>
@@ -414,7 +416,7 @@ export default function BroadcastPage() {
                 navigator.clipboard.writeText(`${window.location.origin}/browse`)
                 alert('Browse link copied!')
               }}
-              className="w-full bg-blue-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors mb-6"
+              className="w-full bg-blue-500 text-white font-bold py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors mb-6"
             >
               📋 Copy Browse Link for Guests
             </button>
@@ -441,11 +443,11 @@ export default function BroadcastPage() {
         </div>
 
         {/* Chat Sidebar */}
-        <div className="bg-white rounded-lg shadow-lg p-6 flex flex-col h-[600px] md:h-[750px]">
+        <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 flex flex-col h-auto md:h-[720px]">
           <h2 className="text-xl font-bold text-gray-800 mb-4">💬 Chat</h2>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-2">
+          <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-1 sm:pr-2 max-h-[360px] md:max-h-none">
             {messages.length === 0 ? (
               <p className="text-gray-500 text-center text-sm">
                 No messages yet. Start chatting!
@@ -471,7 +473,7 @@ export default function BroadcastPage() {
           </div>
 
           {/* Message Input */}
-          <form onSubmit={handleSendMessage} className="flex gap-2 border-t pt-4">
+          <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-gray-100 pt-4">
             <input
               type="text"
               value={messageInput}
