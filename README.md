@@ -41,6 +41,11 @@ musicStreaming/
 - **State Management**: Zustand
 - **Deployment**: Vercel (frontend), Render/Railway (backend)
 
+## Live Demo
+
+🚀 **Frontend**: https://musicstreaming-frontend.vercel.app/  
+🎵 **Backend**: https://musicstreaming-backend.onrender.com/
+
 ## Quick Start
 
 ### Prerequisites
@@ -48,7 +53,9 @@ musicStreaming/
 - Node.js 18+ installed
 - npm or yarn package manager
 
-### Backend Setup
+### Local Development
+
+**Backend Setup**
 
 ```bash
 cd backend
@@ -58,7 +65,7 @@ npm run dev
 
 Backend runs on `http://localhost:3001`
 
-### Frontend Setup
+**Frontend Setup** (in another terminal)
 
 ```bash
 cd frontend
@@ -67,6 +74,17 @@ npm run dev
 ```
 
 Frontend runs on `http://localhost:3000`
+
+### Production Deployment
+
+**Frontend** (Vercel)
+- Connected to GitHub: auto-deploys on push to main
+- URL: https://musicstreaming-frontend.vercel.app/
+
+**Backend** (Render)
+- Connected to GitHub: auto-deploys on push to main
+- URL: https://musicstreaming-backend.onrender.com/
+- Connects to frontend via `NEXT_PUBLIC_SOCKET_URL` environment variable
 
 ## Environment Variables
 
@@ -94,14 +112,35 @@ AUDIO_CHANNELS=2
 MAX_USERS_PER_ROOM=100
 ```
 
-## How It Works
+## How to Use
 
-1. **Host Creates Room** → Click "Start Broadcasting"
-2. **Host Grants Permission** → Browser asks for microphone access
-3. **Audio Capture Starts** → Web Audio API captures system audio
-4. **Share Room ID** → Send link to guests
-5. **Guests Join** → Click link and audio automatically plays
-6. **Real-time Streaming** → All hear the same audio (5-6 second delay)
+### For Hosts (Broadcasting)
+
+1. Go to https://musicstreaming-frontend.vercel.app/broadcast
+2. Enter your name and click "Create Room"
+3. Click "Copy Room ID" to share with guests
+4. Click "Start Broadcast" and grant microphone/audio permission
+5. System audio will start streaming to all joined guests
+6. Chat with guests in real-time
+
+### For Guests (Listening)
+
+1. Go to https://musicstreaming-frontend.vercel.app/browse
+2. Enter your name
+3. Select a room from the list and click "Join"
+4. Audio automatically starts playing when host broadcasts
+5. Chat with the host and other guests
+6. Leave when done
+
+### Testing Locally
+
+1. Terminal 1: Start backend (`cd backend && npm run dev`)
+2. Terminal 2: Start frontend (`cd frontend && npm run dev`)
+3. Open http://localhost:3000/broadcast in browser 1
+4. Open http://localhost:3000/browse in browser 2
+5. Create room and test streaming + chat
+
+## How It Works
 
 ## Architecture
 
@@ -126,17 +165,41 @@ Guest Receives → Circular Buffer → Playback
 
 ## Deployment
 
-### Frontend (Vercel)
+### Prerequisites for Deployment
 
-```bash
-vercel deploy
-```
+1. GitHub account with repository access
+2. Vercel account (for frontend)
+3. Render account (for backend)
 
-### Backend (Render/Railway)
+### Frontend Deployment (Vercel)
 
-1. Connect GitHub repository
-2. Set environment variables
-3. Deploy with auto-restart on crashes
+1. Push code to GitHub main branch
+2. Go to https://vercel.com/dashboard
+3. Import repository `abhishekbagde/musicStreaming`
+4. Set **Root Directory** to `frontend`
+5. Add environment variable:
+   - `NEXT_PUBLIC_SOCKET_URL` = `https://musicstreaming-backend.onrender.com`
+6. Deploy (auto-deploys on push)
+
+### Backend Deployment (Render)
+
+1. Push code to GitHub main branch
+2. Go to https://render.com/dashboard
+3. Create new **Web Service**
+4. Connect `abhishekbagde/musicStreaming` repository
+5. Configure:
+   - **Name**: musicstreaming-backend
+   - **Environment**: Node
+   - **Build Command**: `cd backend && npm install`
+   - **Start Command**: `cd backend && npm start`
+6. Add environment variables:
+   - `NODE_ENV` = `production`
+   - `CORS_ORIGIN` = `https://musicstreaming-frontend.vercel.app`
+7. Deploy
+
+### CI/CD
+
+Both services auto-deploy when you push to the main branch on GitHub.
 
 ## API Endpoints
 
