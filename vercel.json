@@ -1,6 +1,8 @@
 {
-  "buildCommand": "cd frontend && npm install && npm run build",
+  "buildCommand": "cd frontend && npm run build",
   "installCommand": "cd frontend && npm install",
-  "framework": "nextjs",
-  "outputDirectory": "frontend/.next"
+  "devCommand": "cd frontend && npm run dev",
+  "env": {
+    "NEXT_PUBLIC_SOCKET_URL": "@next_public_socket_url"
+  }
 }
