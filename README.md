@@ -43,8 +43,12 @@ musicStreaming/
 
 ## Live Demo
 
-🚀 **Frontend**: https://musicstreaming-frontend.vercel.app/  
+🚀 **Frontend**: https://music-streaming-dun.vercel.app/  
 🎵 **Backend**: https://musicstreaming-backend.onrender.com/
+
+**Try it now:**
+- **Host**: Go to [Broadcast](https://music-streaming-dun.vercel.app/broadcast), create a room, and start broadcasting
+- **Guest**: Go to [Browse](https://music-streaming-dun.vercel.app/browse), find the room, and join to listen
 
 ## Quick Start
 
@@ -116,7 +120,7 @@ MAX_USERS_PER_ROOM=100
 
 ### For Hosts (Broadcasting)
 
-1. Go to https://musicstreaming-frontend.vercel.app/broadcast
+1. Go to https://music-streaming-dun.vercel.app/broadcast
 2. Enter your name and click "Create Room"
 3. Click "Copy Room ID" to share with guests
 4. Click "Start Broadcast" and grant microphone/audio permission
@@ -125,7 +129,7 @@ MAX_USERS_PER_ROOM=100
 
 ### For Guests (Listening)
 
-1. Go to https://musicstreaming-frontend.vercel.app/browse
+1. Go to https://music-streaming-dun.vercel.app/browse
 2. Enter your name
 3. Select a room from the list and click "Join"
 4. Audio automatically starts playing when host broadcasts
@@ -240,6 +244,38 @@ Both services auto-deploy when you push to the main branch on GitHub.
 - Input sanitization for chat
 - Rate limiting on messages
 - HTTPS/WSS in production
+
+## Troubleshooting
+
+### "Failed to fetch rooms" error
+
+**Cause**: Frontend can't connect to backend
+
+**Solutions**:
+1. Check `NEXT_PUBLIC_SOCKET_URL` environment variable in Vercel is set to backend URL
+2. Verify backend `CORS_ORIGIN` matches frontend URL in Render environment variables
+3. Check browser console (F12) for CORS errors
+4. Ensure backend service is running on Render (check status in Render dashboard)
+
+### Audio not streaming to guests
+
+**Cause**: Socket.io connection issues
+
+**Solutions**:
+1. Check browser console for connection errors
+2. Verify Socket.io server is running (check Render logs)
+3. Test with local development setup first
+4. Check firewall/network restrictions
+
+### Rooms not showing up in browse page
+
+**Cause**: Backend not responding to API requests
+
+**Solutions**:
+1. Test backend directly: `curl https://musicstreaming-backend.onrender.com/api/rooms`
+2. Check Render backend logs for errors
+3. Verify `CORS_ORIGIN` environment variable includes frontend URL
+4. Clear browser cache and hard refresh (Ctrl+Shift+R or Cmd+Shift+R)
 
 ## Future Enhancements
 
