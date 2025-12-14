@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: musicstreaming-backend
+    env: node
+    plan: free
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: CORS_ORIGIN
+        fromService:
+          type: static_site
+          name: musicstreaming-frontend
+          envVarKey: VERCEL_URL
