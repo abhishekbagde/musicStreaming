@@ -28,13 +28,18 @@ export default function BrowsePage() {
   const fetchRooms = async () => {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001'
+      console.log('Fetching rooms from:', `${backendUrl}/api/rooms`)
       const response = await fetch(`${backendUrl}/api/rooms`)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
       const data = await response.json()
+      console.log('Rooms fetched:', data)
       setRooms(data)
       setError('')
     } catch (err) {
-      setError('Failed to fetch rooms')
-      console.error(err)
+      console.error('Error fetching rooms:', err)
+      setError(`Failed to fetch rooms: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
       setLoading(false)
     }
