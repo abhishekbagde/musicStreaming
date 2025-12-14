@@ -106,9 +106,31 @@ export default function BroadcastPage() {
 
   const handleStartBroadcast = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-      })
+      let stream: MediaStream | null = null
+      
+      // Try audio-only capture first (no screen needed)
+      try {
+        console.log('Attempting audio-only capture...')
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          } as any,
+          video: false,
+        } as any)
+        console.log('Audio-only capture successful')
+      } catch (displayError) {
+        // Fallback to microphone if audio-only not supported
+        console.log('Audio-only not available, using microphone:', displayError)
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+        })
+      }
 
       const audioContext =
         new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -140,8 +162,8 @@ export default function BroadcastPage() {
         socket.emit('broadcast:start', { roomId })
       }
     } catch (err) {
-      setError('Microphone access denied')
-      console.error('Error accessing microphone:', err)
+      setError('Audio capture access denied. Browser may not support audio capture.')
+      console.error('Error accessing audio:', err)
     }
   }
 
@@ -240,6 +262,21 @@ export default function BroadcastPage() {
               >
                 Copy Link
               </button>
+            </div>
+
+            {/* Info Banner */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-green-900">
+                <strong>🎵 How to stream audio:</strong>
+                <br/>
+                1. Click "Start Broadcast"
+                <br/>
+                2. Your browser will ask to share audio
+                <br/>
+                3. Select your audio source (YouTube, Spotify, System Audio, etc.)
+                <br/>
+                4. ✅ Audio will automatically start streaming to all guests!
+              </p>
             </div>
 
             {/* Broadcast Controls */}
