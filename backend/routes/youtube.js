@@ -1,6 +1,8 @@
 import express from 'express';
-const router = express.Router();
 import youtubeSearchApi from 'youtube-search-api';
+import ytdl from 'ytdl-core';
+
+const router = express.Router();
 
 // GET /api/youtube/search?q=QUERY
 router.get('/search', async (req, res) => {
@@ -26,46 +28,61 @@ router.get('/search', async (req, res) => {
 });
 
 
-// GET /api/youtube/audio?videoId=VIDEO_ID
-import ytdlp from 'yt-dlp-exec';
-import { PassThrough } from 'stream';
-
 router.get('/audio', async (req, res) => {
-  let videoId = req.query.videoId
-  const url = req.query.url
+  let videoId = req.query.videoId;
+  const url = req.query.url;
 
   // Support both videoId and full URL
   if (!videoId && url) {
-    const match = url.match(/v=([^&]+)/)
-    videoId = match ? match[1] : null
+    const match = url.match(/v=([^&]+)/);
+    videoId = match ? match[1] : null;
   }
 
   if (!videoId) {
-    return res.status(400).json({ error: 'Missing videoId or url' })
+    return res.status(400).json({ error: 'Missing videoId or url' });
   }
 
-  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`
+  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
   try {
-    res.setHeader('Content-Type', 'audio/mpeg')
-    res.setHeader('Transfer-Encoding', 'chunked')
-    res.setHeader('Cache-Control', 'no-cache')
-    
-    // Use yt-dlp to extract and stream audio
-    const ytdlpStream = ytdlp.exec(videoUrl, {
-      output: '-',
-      format: 'bestaudio[ext=mp3]/bestaudio/best',
-      quiet: true,
-      limitRate: '1M',
-    }, { stdio: ['ignore', 'pipe', 'ignore'] })
+    res.setHeader('Transfer-Encoding', 'chunked');
+    res.setHeader('Cache-Control', 'no-cache');
 
-    ytdlpStream.stdout.pipe(res)
-    ytdlpStream.on('error', (err) => {
-      res.status(500).end('Audio extraction failed');
+    const audioStream = ytdl(videoUrl, {
+      filter: 'audioonly',
+      quality: 'highestaudio',
+      highWaterMark: 1 << 25,
+      requestOptions: {
+        headers: {
+          // Pretend to be a browser to avoid throttling
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        },
+      },
     });
+
+    audioStream.once('info', (_info, format) => {
+      const mimeType = format?.mimeType?.split(';')?.[0] || 'audio/webm';
+      if (!res.headersSent) {
+        res.setHeader('Content-Type', mimeType);
+      }
+    });
+
+    audioStream.on('error', (err) => {
+      console.error('YouTube audio stream error', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Audio extraction failed', details: err.message });
+      } else {
+        res.destroy(err);
+      }
+    });
+
     res.on('close', () => {
-      ytdlpStream.kill();
+      audioStream.destroy();
     });
+
+    audioStream.pipe(res);
   } catch (err) {
+    console.error('Failed to stream YouTube audio', err);
     res.status(500).json({ error: 'Audio extraction failed', details: err.message });
   }
 });
