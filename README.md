@@ -257,6 +257,31 @@ Both services auto-deploy when you push to the main branch on GitHub.
 3. Check browser console (F12) for CORS errors
 4. Ensure backend service is running on Render (check status in Render dashboard)
 
+### Audio not streaming from YouTube/Spotify/Apple Music
+
+**Cause**: Browser security restrictions (CORS/DRM) prevent capturing audio from external services
+
+**Solutions**:
+
+**Option 1: Use System Audio Capture (Recommended)**
+- When you click "Start Broadcast", the browser will ask you to select an audio source
+- Choose "Share audio" or your browser tab and check "Share audio"
+- This works for YouTube, Spotify, Apple Music, etc.
+
+**Option 2: Install Virtual Audio Device** 
+- **Mac**: Install [Soundflower](https://github.com/mattingalls/Soundflower) (free) or [BlackHole](https://github.com/ExistentialAudio/BlackHole) (recommended)
+- **Windows**: Install [VB-Audio Virtual Cable](https://vb-audio.com/Cable/) (free)
+- Set your system audio to output to the virtual device
+- Browser will capture the virtual device
+- Route audio back to speakers via system settings
+- This allows seamless streaming from any audio source
+
+**Option 3: Upload Local Music Files**
+- Upload MP3/WAV files directly from your computer
+- Great for pre-recorded music or playlists
+
+**Note**: Direct capturing from Spotify Web, Apple Music, and YouTube is blocked by these services for copyright protection
+
 ### Audio not streaming to guests
 
 **Cause**: Socket.io connection issues
