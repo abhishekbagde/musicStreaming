@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import { socket } from '@/utils/socketClient'
 
@@ -74,6 +74,15 @@ export default function RoomPage() {
   const [activeVideo, setActiveVideo] = useState<{ videoId: string; startSeconds: number } | null>(null)
   const [audioConsent, setAudioConsent] = useState(false)
   const pendingVideoRef = useRef<{ videoId: string; startSeconds: number } | null>(null)
+
+  const enableAudio = useCallback(() => {
+    if (audioConsent) return
+    setAudioConsent(true)
+    if (pendingVideoRef.current) {
+      setActiveVideo(pendingVideoRef.current)
+      pendingVideoRef.current = null
+    }
+  }, [audioConsent])
 
   // --- Socket.io Listeners ---
   useEffect(() => {
@@ -194,11 +203,20 @@ export default function RoomPage() {
   }, [audioConsent, roomId, router])
 
   useEffect(() => {
-    if (audioConsent && pendingVideoRef.current) {
-      setActiveVideo(pendingVideoRef.current)
-      pendingVideoRef.current = null
+    if (audioConsent) return
+
+    const handleFirstInteraction = () => {
+      enableAudio()
     }
-  }, [audioConsent])
+
+    window.addEventListener('touchend', handleFirstInteraction, { passive: true, once: true })
+    window.addEventListener('click', handleFirstInteraction, { once: true })
+
+    return () => {
+      window.removeEventListener('touchend', handleFirstInteraction)
+      window.removeEventListener('click', handleFirstInteraction)
+    }
+  }, [audioConsent, enableAudio])
 
   // --- Chat Handler ---
   const handleSendMessage = (e: React.FormEvent) => {
@@ -238,20 +256,22 @@ export default function RoomPage() {
         />
       )}
       {!audioConsent && (
-        <div className="fixed inset-x-0 top-0 z-10 bg-yellow-100 text-yellow-900 text-center py-3 px-4 shadow">
-          <span>🔊 Tap the button to start listening:</span>
-          <button
-            className="ml-3 bg-yellow-500 text-white font-semibold px-4 py-1 rounded"
-            onClick={() => {
-              setAudioConsent(true)
-              if (pendingVideoRef.current) {
-                setActiveVideo(pendingVideoRef.current)
-                pendingVideoRef.current = null
-              }
-            }}
-          >
-            Enable Audio
-          </button>
+        <div className="fixed inset-x-0 bottom-0 md:top-0 md:bottom-auto z-10 px-4 pb-6 pt-2 pointer-events-none">
+          <div className="max-w-md mx-auto bg-yellow-100 text-yellow-900 rounded-xl shadow-lg p-4 flex flex-col gap-3 pointer-events-auto">
+            <div className="text-sm md:text-base font-semibold flex items-center gap-2 justify-center">
+              <span role="img" aria-label="speaker">🔊</span>
+              Tap once to sync audio with the host
+            </div>
+            <button
+              className="w-full bg-yellow-500 text-white font-bold py-2 rounded-lg text-base"
+              onClick={enableAudio}
+            >
+              Enable Audio
+            </button>
+            <p className="text-xs md:text-sm text-yellow-800 text-center">
+              Mobile browsers require a quick tap before playback is allowed. You only need to do this once per visit.
+            </p>
+          </div>
         </div>
       )}
       
