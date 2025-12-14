@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { socket } from '@/utils/socketClient'
-import { apiClient } from '@/utils/apiClient'
 
 interface Song {
   id: string
@@ -26,6 +25,32 @@ interface Participant {
   isHost: boolean
 }
 
+const extractVideoId = (song: Song | null) => {
+  if (!song) return null
+  if (song.id && /^[a-zA-Z0-9_-]{8,15}$/.test(song.id)) {
+    return song.id
+  }
+  if (song.url) {
+    try {
+      const parsed = new URL(song.url)
+      const fromQuery = parsed.searchParams.get('v')
+      if (fromQuery) return fromQuery
+      const segments = parsed.pathname.split('/')
+      const last = segments[segments.length - 1]
+      if (last) return last
+    } catch (err) {
+      console.warn('Failed to parse YouTube URL', err)
+    }
+  }
+  return song.id || null
+}
+
+const computeStartSeconds = (startedAt?: number) => {
+  if (!startedAt) return 0
+  const elapsedMs = Date.now() - startedAt
+  return Math.max(0, Math.floor(elapsedMs / 1000))
+}
+
 export default function RoomPage() {
   // --- Router & Query Params ---
   const router = useRouter()
@@ -45,11 +70,8 @@ export default function RoomPage() {
   const [isConnected, setIsConnected] = useState(false)
   const [isLive, setIsLive] = useState(false)
 
-  // --- Audio & Refs ---
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const bufferRef = useRef<Float32Array>(new Float32Array(44100 * 10))
-  const writePositionRef = useRef(0)
-  const readPositionRef = useRef(0)
+  // --- Hidden player ---
+  const [activeVideo, setActiveVideo] = useState<{ videoId: string; startSeconds: number } | null>(null)
 
   // --- Socket.io Listeners ---
   useEffect(() => {
@@ -107,15 +129,6 @@ export default function RoomPage() {
       console.log('🔴 Broadcast started')
     })
 
-    // Broadcast audio data
-    socket.on('broadcast:audio', (data) => {
-      const audioData = new Float32Array(data.data)
-      for (let i = 0; i < audioData.length; i++) {
-        bufferRef.current[writePositionRef.current % bufferRef.current.length] = audioData[i]
-        writePositionRef.current++
-      }
-    })
-
     // Broadcast stopped
     socket.on('broadcast:stopped', () => {
       setIsLive(false)
@@ -127,15 +140,22 @@ export default function RoomPage() {
       setQueue(data.queue || [])
       setCurrentSong(data.currentSong || null)
       console.log('🎵 Queue updated:', data.queue?.length || 0)
-      
-      // If there's a current song and it's being played, extract and play audio
-      if (data.currentSong && data.playing && audioRef.current) {
-        const audioUrl = apiClient.getAudio(data.currentSong.url)
-        audioRef.current.src = audioUrl
-        audioRef.current.play().catch(err => {
-          console.error('Error playing audio:', err)
-        })
-        setIsPlaying(true)
+
+      if (typeof data.playing === 'boolean') {
+        if (data.playing && data.currentSong) {
+          const videoId = extractVideoId(data.currentSong)
+          if (videoId) {
+            setActiveVideo({ videoId, startSeconds: computeStartSeconds(data.playingFrom) })
+            setIsPlaying(true)
+          } else {
+            console.error('Unable to determine video ID for', data.currentSong)
+            setActiveVideo(null)
+            setIsPlaying(false)
+          }
+        } else {
+          setActiveVideo(null)
+          setIsPlaying(false)
+        }
       }
     })
 
@@ -157,7 +177,6 @@ export default function RoomPage() {
       socket.off('user:joined')
       socket.off('user:left')
       socket.off('broadcast:started')
-      socket.off('broadcast:audio')
       socket.off('broadcast:stopped')
       socket.off('playlist:update')
       socket.off('chat:message')
@@ -189,11 +208,20 @@ export default function RoomPage() {
   }
 
   // --- Render: Main Interface ---
+  const nowPlaying = currentSong || (queue.length > 0 ? queue[0] : null)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-4">
-      {/* Hidden audio element for playback */}
-      <audio ref={audioRef} crossOrigin="anonymous" onEnded={() => setIsPlaying(false)} />
+      {activeVideo && (
+        <iframe
+          key={`${activeVideo.videoId}-${activeVideo.startSeconds}`}
+          title="YouTube listener player"
+          src={`https://www.youtube.com/embed/${activeVideo.videoId}?autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1&start=${activeVideo.startSeconds}`}
+          allow="autoplay; encrypted-media"
+          className="absolute w-0 h-0 overflow-hidden pointer-events-none"
+          aria-hidden="true"
+        />
+      )}
       
       <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
         {/* Main Player Area */}
@@ -203,12 +231,12 @@ export default function RoomPage() {
             <h2 className="text-2xl font-bold text-gray-800 mb-4">🎵 Music Queue</h2>
 
             {/* Now Playing */}
-            {queue.length > 0 && (
+            {nowPlaying && (
               <div className="mb-6">
                 <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg p-6 text-white">
                   <div className="text-sm font-semibold mb-2">NOW PLAYING</div>
-                  <div className="text-2xl font-bold mb-2 truncate">{queue[0].title}</div>
-                  <div className="text-purple-100 mb-4 truncate">{queue[0].author}</div>
+                  <div className="text-2xl font-bold mb-2 truncate">{nowPlaying.title}</div>
+                  <div className="text-purple-100 mb-4 truncate">{nowPlaying.author}</div>
                 </div>
               </div>
             )}
@@ -223,18 +251,21 @@ export default function RoomPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {queue.map((song, idx) => (
-                    <div key={song.id} className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${idx === 0 ? 'bg-purple-100 border-2 border-purple-500' : 'bg-gray-50 hover:bg-gray-100'}`}>
-                      <div className="text-lg font-bold w-8 text-center">
-                        {idx === 0 ? '▶️' : idx}
+                  {queue.map((song, idx) => {
+                    const isCurrent = currentSong?.id === song.id || (!currentSong && idx === 0)
+                    return (
+                      <div key={song.id} className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${isCurrent ? 'bg-purple-100 border-2 border-purple-500' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                        <div className="text-lg font-bold w-8 text-center">
+                          {isCurrent ? '▶️' : idx}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-gray-800 truncate">{song.title}</div>
+                          <div className="text-sm text-gray-500 truncate">{song.author}</div>
+                        </div>
+                        <div className="text-sm text-gray-400 flex-shrink-0">{song.duration || 'N/A'}</div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-gray-800 truncate">{song.title}</div>
-                        <div className="text-sm text-gray-500 truncate">{song.author}</div>
-                      </div>
-                      <div className="text-sm text-gray-400 flex-shrink-0">{song.duration || 'N/A'}</div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>

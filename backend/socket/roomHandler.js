@@ -33,6 +33,13 @@ export function roomHandler(io, socket, roomManager) {
         }),
       })
 
+      // Send initial empty playlist state to host
+      socket.emit('playlist:update', {
+        queue: roomManager.getQueue(room.roomId),
+        currentSong: roomManager.getCurrentSong(room.roomId),
+        ...roomManager.getPlaybackState(room.roomId),
+      })
+
       console.log(`Room created: ${room.roomId} by ${userId}`)
     } catch (error) {
       console.error('Error creating room:', error)
@@ -79,6 +86,13 @@ export function roomHandler(io, socket, roomManager) {
         username: username || `Guest_${Math.random().toString(36).substr(2, 5)}`,
         isHost: false,
         participantCount: room.participants.length,
+      })
+
+      // Send current playlist state to the new user
+      socket.emit('playlist:update', {
+        queue: roomManager.getQueue(roomId),
+        currentSong: roomManager.getCurrentSong(roomId),
+        ...roomManager.getPlaybackState(roomId),
       })
 
       console.log(`User ${userId} joined room ${roomId}`)

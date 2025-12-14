@@ -13,9 +13,12 @@ export const playlistHandler = (io, socket, roomManager) => {
     const queue = roomManager.getQueue(roomId)
 
     // Broadcast updated queue to all users in room
+    const playbackState = roomManager.getPlaybackState(roomId)
     io.to(roomId).emit('playlist:update', {
       queue,
       currentSong: roomManager.getCurrentSong(roomId),
+      playing: playbackState.playing,
+      playingFrom: playbackState.playingFrom,
     })
   })
 
@@ -38,9 +41,12 @@ export const playlistHandler = (io, socket, roomManager) => {
     const queue = roomManager.getQueue(roomId)
 
     // Broadcast updated queue to all users in room
+    const playbackState = roomManager.getPlaybackState(roomId)
     io.to(roomId).emit('playlist:update', {
       queue,
       currentSong: roomManager.getCurrentSong(roomId),
+      playing: playbackState.playing,
+      playingFrom: playbackState.playingFrom,
     })
   })
 
@@ -68,6 +74,8 @@ export const playlistHandler = (io, socket, roomManager) => {
     // Set the first song in queue as current
     const currentSong = queue[0]
     roomManager.setCurrentSong(roomId, currentSong)
+    const startedAt = Date.now()
+    roomManager.setPlaybackState(roomId, true, startedAt)
 
     console.log(`▶️ Now playing: ${currentSong.title} in room ${roomId}`)
 
@@ -76,7 +84,7 @@ export const playlistHandler = (io, socket, roomManager) => {
       queue,
       currentSong,
       playing: true,
-      playingFrom: Date.now(),
+      playingFrom: startedAt,
     })
   })
 
@@ -107,13 +115,20 @@ export const playlistHandler = (io, socket, roomManager) => {
     const nextSong = updatedQueue.length > 0 ? updatedQueue[0] : null
 
     roomManager.setCurrentSong(roomId, nextSong)
+    let playingFrom = null
+    if (nextSong) {
+      playingFrom = Date.now()
+      roomManager.setPlaybackState(roomId, true, playingFrom)
+    } else {
+      roomManager.setPlaybackState(roomId, false)
+    }
 
     // Broadcast to all users in room
     io.to(roomId).emit('playlist:update', {
       queue: updatedQueue,
       currentSong: nextSong,
       playing: nextSong ? true : false,
-      playingFrom: Date.now(),
+      playingFrom,
     })
   })
 }

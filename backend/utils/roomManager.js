@@ -22,6 +22,8 @@ class RoomManager {
       },
       queue: [], // Playlist queue: array of song objects
       currentSong: null, // Currently playing song object
+      isPlaying: false,
+      playingFrom: null,
     }
     this.rooms[roomId] = room
     this.userSessions[hostId] = { roomId, isHost: true, username: 'Host' }
@@ -141,6 +143,21 @@ class RoomManager {
     if (room) {
       room.isLive = isLive
     }
+  }
+
+  setPlaybackState(roomId, playing, startedAt = null) {
+    const room = this.rooms[roomId]
+    if (!room) return
+    room.isPlaying = playing
+    room.playingFrom = playing ? (startedAt || Date.now()) : null
+  }
+
+  getPlaybackState(roomId) {
+    const room = this.rooms[roomId]
+    if (!room) {
+      return { playing: false, playingFrom: null }
+    }
+    return { playing: room.isPlaying || false, playingFrom: room.playingFrom || null }
   }
 
   getUserSession(userId) {
