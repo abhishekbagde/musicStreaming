@@ -405,10 +405,10 @@ export default function BroadcastPage() {
             </div>
           </div>
           {/* Room Info */}
-          <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-gray-800">🎤 Room</h2>
-              <div className="text-sm text-gray-500">ID: {roomId?.slice(-8)}</div>
+          <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <h2 className="text-2xl font-bold">🎤 Room</h2>
+              <div className="text-sm text-white/60">ID: {roomId?.slice(-8)}</div>
             </div>
             
             <button
@@ -416,22 +416,22 @@ export default function BroadcastPage() {
                 navigator.clipboard.writeText(`${window.location.origin}/browse`)
                 alert('Browse link copied!')
               }}
-              className="w-full bg-blue-500 text-white font-bold py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors mb-6"
+              className="w-full bg-gradient-to-r from-blue-500 to-cyan-400 text-white font-semibold py-3 px-4 rounded-2xl shadow-lg hover:opacity-90 transition mb-4"
             >
               📋 Copy Browse Link for Guests
             </button>
 
             {/* Participants */}
             <div>
-              <h3 className="font-bold text-lg text-gray-800 mb-3">Participants ({participants.length})</h3>
+              <h3 className="font-bold text-lg mb-3 text-white/80">Participants ({participants.length})</h3>
               {participants.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">Waiting for guests...</p>
+                <p className="text-white/50 text-center py-4">Waiting for guests...</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {participants.map((p) => (
                     <div
                       key={p.userId}
-                      className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white px-4 py-2 rounded-full font-semibold text-sm"
+                      className="bg-white/10 text-white px-4 py-2 rounded-full font-semibold text-sm border border-white/10"
                     >
                       {p.isHost ? '🎤' : '👥'} {p.username}
                     </div>
@@ -443,27 +443,27 @@ export default function BroadcastPage() {
         </div>
 
         {/* Chat Sidebar */}
-        <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 flex flex-col h-auto md:h-[720px]">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">💬 Chat</h2>
+        <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-6 flex flex-col h-auto md:h-[720px]">
+          <h2 className="text-xl font-bold mb-4">💬 Chat</h2>
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-1 sm:pr-2 max-h-[360px] md:max-h-none">
             {messages.length === 0 ? (
-              <p className="text-gray-500 text-center text-sm">
+              <p className="text-white/50 text-center text-sm">
                 No messages yet. Start chatting!
               </p>
             ) : (
               messages.map((msg, idx) => (
-                <div key={idx} className="text-sm">
+                <div key={idx} className="text-sm bg-white/5 rounded-2xl p-3 border border-white/5">
                   <div className="flex items-baseline gap-2">
-                    <span className="font-bold text-purple-600">
+                    <span className="font-semibold text-purple-300">
                       {msg.isHost ? '🎤' : ''} {msg.username}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-white/50">
                       {new Date(msg.timestamp).toLocaleTimeString()}
                     </span>
                   </div>
-                  <p className="text-gray-700 ml-4 break-words">
+                  <p className="text-white/80 ml-4 break-words">
                     {msg.message}
                   </p>
                 </div>
@@ -473,17 +473,17 @@ export default function BroadcastPage() {
           </div>
 
           {/* Message Input */}
-          <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-gray-100 pt-4">
+          <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-white/10 pt-4">
             <input
               type="text"
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
               placeholder="Type a message..."
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="flex-1 px-3 py-3 border border-white/10 rounded-2xl text-sm bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
             />
             <button
               type="submit"
-              className="bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm font-bold"
+              className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-2xl font-semibold hover:opacity-90 transition text-sm"
             >
               Send
             </button>
