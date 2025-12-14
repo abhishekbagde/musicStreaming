@@ -1,8 +1,5 @@
 {
   "buildCommand": "cd frontend && npm run build",
   "installCommand": "cd frontend && npm install",
-  "devCommand": "cd frontend && npm run dev",
-  "env": {
-    "NEXT_PUBLIC_SOCKET_URL": "@next_public_socket_url"
-  }
+  "devCommand": "cd frontend && npm run dev"
 }
