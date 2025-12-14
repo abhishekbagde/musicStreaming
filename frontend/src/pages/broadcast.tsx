@@ -1,6 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { socket } from '@/utils/socketClient'
-import { useRoomStore } from '@/utils/roomStore'
+import { apiClient } from '@/utils/apiClient'
+
+interface Song {
+  id: string
+  title: string
+  author: string
+  duration?: string
+  thumbnail?: string
+  url: string
+}
 
 interface ChatMessage {
   userId: string
@@ -10,95 +19,121 @@ interface ChatMessage {
   isHost: boolean
 }
 
+interface Participant {
+  userId: string
+  username: string
+  isHost: boolean
+}
+
 export default function BroadcastPage() {
+  // --- Room State ---
   const [roomName, setRoomName] = useState('')
   const [roomId, setRoomId] = useState<string | null>(null)
-  const [isRecording, setIsRecording] = useState(false)
-  const [broadcastMode, setBroadcastMode] = useState<'microphone' | 'file'>('microphone')
-  const [participants, setParticipants] = useState<Array<{ userId: string; username: string; isHost: boolean }>>([])
+
+  // --- Participants & Chat ---
+  const [participants, setParticipants] = useState<Participant[]>([])
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [messageInput, setMessageInput] = useState('')
-  const [error, setError] = useState('')
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const processorRef = useRef<ScriptProcessorNode | null>(null)
-  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null)
-  const audioElementRef = useRef<HTMLAudioElement | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  // --- Playlist & Search ---
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<Song[]>([])
+  const [queue, setQueue] = useState<Song[]>([])
+  const [currentSong, setCurrentSong] = useState<Song | null>(null)
+
+  // --- UI State ---
+  const [error, setError] = useState('')
+  const [isHost, setIsHost] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+
+  // --- Refs ---
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
+
+  // --- Scroll to bottom for chat ---
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  // --- Socket.io Listeners ---
   useEffect(() => {
-    // Listen for room creation
+    // Room events
     socket.on('room:created', (data) => {
       setRoomId(data.roomId)
       setError('')
-      console.log('Room created:', data.roomId)
-      // Add host as initial participant
-      setParticipants([
-        {
-          userId: socket.id || 'host',
-          username: 'You (Host)',
-          isHost: true,
-        },
-      ])
+      console.log('✅ Room created:', data.roomId)
+      setParticipants([{ userId: socket.id || 'host', username: 'You (Host)', isHost: true }])
     })
 
-    // Listen for participants list update - replace entire list
+    // Participants events
     socket.on('participants:list', (data) => {
-      const participantsList = data.participants || []
-      setParticipants(participantsList)
-      console.log('Participants list updated:', participantsList.length)
+      setParticipants(data.participants || [])
+      console.log('👥 Participants:', data.participants?.length || 0)
     })
 
-    // Listen for user joined - only add if not in current list
     socket.on('user:joined', (data) => {
       setParticipants((prev) => {
         const exists = prev.some((p) => p.userId === data.userId)
         if (!exists) {
-          console.log('Adding participant:', data.username)
-          return [
-            ...prev,
-            {
-              userId: data.userId,
-              username: data.username,
-              isHost: data.isHost || false,
-            },
-          ]
+          console.log('➕ User joined:', data.username)
+          return [...prev, { userId: data.userId, username: data.username, isHost: data.isHost || false }]
         }
         return prev
       })
     })
 
-    // Listen for user left
     socket.on('user:left', (data) => {
+      console.log('➖ User left:', data.userId)
       setParticipants((prev) => prev.filter((p) => p.userId !== data.userId))
     })
 
-    // Listen for chat messages
-    socket.on('chat:message', (data: ChatMessage) => {
+    // Playlist events
+    socket.on('playlist:update', (data) => {
+      setQueue(data.queue || [])
+      setCurrentSong(data.currentSong || null)
+      console.log('🎵 Queue updated:', data.queue?.length || 0)
+      
+      // If there's a current song and it's being played, extract and play audio
+      if (data.currentSong && data.playing && audioRef.current) {
+        const audioUrl = apiClient.getAudio(data.currentSong.url)
+        audioRef.current.src = audioUrl
+        audioRef.current.play().catch(err => {
+          console.error('Error playing audio:', err)
+        })
+        setIsPlaying(true)
+      }
+    })
+
+    // Chat events
+    socket.on('chat:message', (data) => {
       setMessages((prev) => [...prev, data])
       scrollToBottom()
     })
 
-    // Listen for errors
+    // Error events
     socket.on('error', (data) => {
       setError(data.message)
+      console.error('❌ Error:', data.message)
     })
 
     return () => {
-      // Clean up all listeners
       socket.off('room:created')
       socket.off('participants:list')
       socket.off('user:joined')
       socket.off('user:left')
+      socket.off('playlist:update')
       socket.off('chat:message')
       socket.off('error')
     }
   }, [])
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  // --- Detect if user is host ---
+  useEffect(() => {
+    const me = participants.find((p) => p.userId === (socket.id || 'host'))
+    setIsHost(!!me?.isHost)
+  }, [participants])
 
+  // --- Room Management ---
   const handleCreateRoom = (e: React.FormEvent) => {
     e.preventDefault()
     if (!roomName.trim()) {
@@ -108,126 +143,51 @@ export default function BroadcastPage() {
     socket.emit('room:create', { roomName })
   }
 
-  const handleStartBroadcast = async () => {
+
+
+  // --- Playlist Handlers ---
+  const handleYouTubeSearch = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!searchQuery.trim()) return
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-      })
-
-      const audioContext =
-        new (window.AudioContext || (window as any).webkitAudioContext)()
-      audioContextRef.current = audioContext
-
-      const source = audioContext.createMediaStreamSource(stream)
-      const processor = audioContext.createScriptProcessor(4096, 2, 2)
-      processorRef.current = processor
-
-      source.connect(processor)
-      processor.connect(audioContext.destination)
-
-      processor.onaudioprocess = (event) => {
-        const audioData = event.inputBuffer.getChannelData(0)
-        if (roomId) {
-          socket.emit('broadcast:audio', {
-            roomId,
-            data: Array.from(audioData),
-            timestamp: Date.now(),
-            duration: 100,
-            quality: 'high',
-          })
-        }
-      }
-
-      setIsRecording(true)
-
-      if (roomId) {
-        socket.emit('broadcast:start', { roomId })
-      }
+      const data = await apiClient.search(searchQuery)
+      setSearchResults(data.results || [])
     } catch (err) {
-      setError('Microphone access denied')
-      console.error('Error accessing microphone:', err)
+      setSearchResults([])
+      setError('YouTube search failed')
+      console.error('Search error:', err)
     }
   }
 
-  const handlePlayMusicFile = async (file: File) => {
-    try {
-      setSelectedFile(file)
-      setError('')
-
-      const audioContext =
-        new (window.AudioContext || (window as any).webkitAudioContext)()
-      audioContextRef.current = audioContext
-
-      const arrayBuffer = await file.arrayBuffer()
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
-
-      const source = audioContext.createBufferSource()
-      audioSourceRef.current = source
-      source.buffer = audioBuffer
-
-      const processor = audioContext.createScriptProcessor(4096, 2, 2)
-      processorRef.current = processor
-
-      source.connect(processor)
-      processor.connect(audioContext.destination)
-
-      processor.onaudioprocess = (event) => {
-        const audioData = event.inputBuffer.getChannelData(0)
-        if (roomId) {
-          socket.emit('broadcast:audio', {
-            roomId,
-            data: Array.from(audioData),
-            timestamp: Date.now(),
-            duration: 100,
-            quality: 'high',
-          })
-        }
-      }
-
-      source.start(0)
-      setIsRecording(true)
-
-      if (roomId) {
-        socket.emit('broadcast:start', { roomId })
-      }
-
-      // Auto stop when music ends
-      source.onended = () => {
-        handleStopBroadcast()
-      }
-    } catch (err) {
-      setError('Error playing music file. Make sure it\'s a valid audio file (MP3, WAV, OGG, etc.)')
-      console.error('Error playing music:', err)
-    }
+  const handleAddSong = (song: Song) => {
+    if (!roomId) return
+    socket.emit('song:add', { roomId, song })
+    console.log('➕ Song added:', song.title)
   }
 
-  const handleStopBroadcast = () => {
-    if (processorRef.current) {
-      processorRef.current.disconnect()
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close()
-    }
-    if (audioSourceRef.current) {
-      audioSourceRef.current.stop()
-      audioSourceRef.current = null
-    }
-    setIsRecording(false)
-    setSelectedFile(null)
-
-    if (roomId) {
-      socket.emit('broadcast:stop', { roomId })
-    }
+  const handleRemoveSong = (songId: string) => {
+    if (!roomId || !isHost) return
+    socket.emit('song:remove', { roomId, songId })
+    console.log('➖ Song removed:', songId)
   }
 
+  const handlePlayNext = () => {
+    if (!roomId || !isHost) return
+    socket.emit('song:play', { roomId })
+    console.log('▶️ Playing next song')
+  }
+
+  const handleSkip = () => {
+    if (!roomId || !isHost) return
+    socket.emit('song:skip', { roomId })
+    console.log('⏭️ Skipped to next song')
+  }
+
+  // --- Chat Handler ---
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault()
     if (!messageInput.trim() || !roomId) return
-
-    socket.emit('chat:message', {
-      roomId,
-      message: messageInput,
-    })
+    socket.emit('chat:message', { roomId, message: messageInput })
     setMessageInput('')
   }
 
@@ -272,147 +232,165 @@ export default function BroadcastPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-4">
+      {/* Hidden audio element for playback */}
+      <audio ref={audioRef} crossOrigin="anonymous" onEnded={() => setIsPlaying(false)} />
+      
       <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
         {/* Main Area */}
         <div className="md:col-span-2 space-y-6">
-          {/* Broadcast Header */}
+          {/* --- YouTube Search & Playlist UI --- */}
           <div className="bg-white rounded-lg shadow-lg p-6">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">
-              🎤 Broadcasting
-            </h1>
-            <p className="text-gray-600 mb-4">Room: {roomId}</p>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">🎵 Music Queue</h2>
 
-            {/* Copy Room ID */}
-            <div className="flex items-center gap-2 mb-6">
-              <input
-                type="text"
-                value={roomId}
-                readOnly
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-100"
-              />
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(
-                    `${window.location.origin}/browse`
-                  )
-                  alert('Browse link copied!')
-                }}
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
-              >
-                Copy Link
-              </button>
-            </div>
-
-            {/* Info Banner */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-blue-900">
-                <strong>💡 Choose a broadcast mode:</strong>
-                <br/>
-                🎤 <strong>Microphone:</strong> Stream from your computer's microphone or system audio
-                <br/>
-                🎵 <strong>Upload Music:</strong> Upload MP3/WAV files to stream to your guests
-              </p>
-            </div>
-
-            {/* Broadcast Mode Selection */}
-            <div className="mb-6 flex gap-4 flex-wrap">
-              <label className="flex items-center gap-2 cursor-pointer">
+            {/* Search Bar */}
+            <form onSubmit={handleYouTubeSearch} className="mb-6">
+              <div className="flex gap-2">
                 <input
-                  type="radio"
-                  name="broadcast-mode"
-                  checked={broadcastMode === 'microphone'}
-                  onChange={() => {
-                    setBroadcastMode('microphone')
-                    setSelectedFile(null)
-                  }}
-                  className="w-4 h-4"
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search YouTube..."
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
-                <span className="text-gray-700 font-medium">🎤 Microphone Mode</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="broadcast-mode"
-                  checked={broadcastMode === 'file'}
-                  onChange={() => setBroadcastMode('file')}
-                  className="w-4 h-4"
-                />
-                <span className="text-gray-700 font-medium">🎵 Upload Music</span>
-              </label>
-            </div>
+                <button
+                  type="submit"
+                  className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 font-bold transition-colors"
+                >
+                  🔍 Search
+                </button>
+              </div>
+            </form>
 
-            {/* File Upload Section */}
-            {broadcastMode === 'file' && !isRecording && (
+            {/* Search Results Dropdown */}
+            {searchResults.length > 0 && (
+              <div className="mb-6 border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-4 py-2 border-b font-semibold text-sm">Search Results</div>
+                <ul className="max-h-72 overflow-y-auto">
+                  {searchResults.map((song) => (
+                    <li key={song.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors p-3">
+                      <div className="flex items-start gap-3">
+                        {song.thumbnail && (
+                          <img src={song.thumbnail} alt="thumbnail" className="w-14 h-14 rounded object-cover flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-gray-800 truncate">{song.title}</div>
+                          <div className="text-sm text-gray-500 truncate">{song.author}</div>
+                          <div className="text-xs text-gray-400">{song.duration || 'N/A'}</div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            handleAddSong(song)
+                            setSearchResults([]) // Close dropdown after adding
+                          }}
+                          className="bg-green-500 text-white px-3 py-2 rounded hover:bg-green-600 text-sm font-bold flex-shrink-0 whitespace-nowrap"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Now Playing */}
+            {queue.length > 0 && (
               <div className="mb-6">
-                <label className="block text-gray-700 font-bold mb-2">
-                  Select Music File (MP3, WAV, OGG, M4A)
-                </label>
-                <input
-                  type="file"
-                  accept="audio/*"
-                  onChange={(e) => {
-                    if (e.target.files?.[0]) {
-                      handlePlayMusicFile(e.target.files[0])
-                    }
-                  }}
-                  className="w-full px-4 py-2 border-2 border-dashed border-purple-300 rounded-lg cursor-pointer hover:border-purple-500"
-                />
-                {selectedFile && (
-                  <p className="text-sm text-green-600 mt-2">
-                    ✓ Selected: {selectedFile.name}
-                  </p>
-                )}
+                <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg p-6 text-white">
+                  <div className="text-sm font-semibold mb-2">NOW PLAYING</div>
+                  <div className="text-2xl font-bold mb-2 truncate">{queue[0].title}</div>
+                  <div className="text-purple-100 mb-4 truncate">{queue[0].author}</div>
+                  
+                  {isHost && (
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handlePlayNext}
+                        className="bg-white text-purple-600 px-6 py-2 rounded font-bold hover:bg-gray-100 transition-colors flex-1"
+                      >
+                        ▶️ Play
+                      </button>
+                      <button
+                        onClick={handleSkip}
+                        className="bg-purple-700 text-white px-6 py-2 rounded font-bold hover:bg-purple-800 transition-colors flex-1"
+                      >
+                        ⏭️ Skip
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
-            {/* Broadcast Controls */}
-            <div className="flex gap-4">
-              {!isRecording && broadcastMode === 'microphone' ? (
-                <button
-                  onClick={handleStartBroadcast}
-                  className="flex-1 bg-green-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-600 transition-colors"
-                >
-                  ▶️ Start Microphone
-                </button>
-              ) : isRecording ? (
-                <button
-                  onClick={handleStopBroadcast}
-                  className="flex-1 bg-red-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-600 transition-colors"
-                >
-                  ⏹️ Stop Broadcast
-                </button>
-              ) : null}
+            {/* Playlist Queue */}
+            <div>
+              <h3 className="font-bold text-lg text-gray-800 mb-3">Queue ({queue.length})</h3>
+              {queue.length === 0 ? (
+                <div className="bg-gray-50 rounded-lg p-8 text-center text-gray-500">
+                  <div className="text-4xl mb-2">🎵</div>
+                  <p>No songs in queue yet. Search and add some!</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {queue.map((song, idx) => (
+                    <div key={song.id} className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${idx === 0 ? 'bg-purple-100 border-2 border-purple-500' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                      <div className="text-lg font-bold w-8 text-center">
+                        {idx === 0 ? '▶️' : idx}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-gray-800 truncate">{song.title}</div>
+                        <div className="text-sm text-gray-500 truncate">{song.author}</div>
+                      </div>
+                      <div className="text-sm text-gray-400 flex-shrink-0">{song.duration || 'N/A'}</div>
+                      {isHost && (
+                        <button
+                          onClick={() => handleRemoveSong(song.id)}
+                          className="bg-red-500 hover:bg-red-600 text-white p-2 rounded transition-colors flex-shrink-0"
+                          title="Remove"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-
-            {isRecording && (
-              <div className="mt-4 flex items-center gap-2 text-green-600 font-bold">
-                <span className="inline-block w-3 h-3 bg-green-600 rounded-full animate-pulse"></span>
-                LIVE
-              </div>
-            )}
           </div>
-
-          {/* Participants */}
+          {/* Room Info */}
           <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">
-              Participants ({participants.length})
-            </h2>
-            {participants.length === 0 ? (
-              <p className="text-gray-600">
-                Waiting for guests to join... Share the room ID above!
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {participants.map((p) => (
-                  <div
-                    key={p.userId}
-                    className="bg-purple-100 px-4 py-2 rounded-lg text-purple-700 font-semibold text-center"
-                  >
-                    {p.isHost ? '🎤' : '👥'} {p.username}
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold text-gray-800">🎤 Room</h2>
+              <div className="text-sm text-gray-500">ID: {roomId?.slice(-8)}</div>
+            </div>
+            
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/browse`)
+                alert('Browse link copied!')
+              }}
+              className="w-full bg-blue-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors mb-6"
+            >
+              📋 Copy Browse Link for Guests
+            </button>
+
+            {/* Participants */}
+            <div>
+              <h3 className="font-bold text-lg text-gray-800 mb-3">Participants ({participants.length})</h3>
+              {participants.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">Waiting for guests...</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {participants.map((p) => (
+                    <div
+                      key={p.userId}
+                      className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white px-4 py-2 rounded-full font-semibold text-sm"
+                    >
+                      {p.isHost ? '🎤' : '👥'} {p.username}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

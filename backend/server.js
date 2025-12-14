@@ -8,6 +8,8 @@ import { roomManager } from './utils/roomManager.js'
 import { audioHandler } from './socket/audioHandler.js'
 import { chatHandler } from './socket/chatHandler.js'
 import { roomHandler } from './socket/roomHandler.js'
+import { playlistHandler } from './socket/playlistHandler.js'
+import youtubeRouter from './routes/youtube.js'
 
 dotenv.config()
 
@@ -36,6 +38,8 @@ app.use(
 )
 
 // Routes
+app.use('/api/youtube', youtubeRouter)
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
@@ -90,6 +94,7 @@ io.on('connection', (socket) => {
   roomHandler(io, socket, roomManager)
   audioHandler(io, socket, roomManager)
   chatHandler(io, socket, roomManager)
+  playlistHandler(io, socket, roomManager)
 
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`)

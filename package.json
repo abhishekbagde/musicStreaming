@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "youtube-search-api": "^2.0.1",
+    "yt-dlp-exec": "^1.0.2"
+  }
+}

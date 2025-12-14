@@ -20,10 +20,45 @@ class RoomManager {
         guestCount: 0,
         quality: 'high',
       },
+      queue: [], // Playlist queue: array of song objects
+      currentSong: null, // Currently playing song object
     }
     this.rooms[roomId] = room
     this.userSessions[hostId] = { roomId, isHost: true, username: 'Host' }
     return room
+  }
+  // Playlist queue management
+  addSongToQueue(roomId, song) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    room.queue.push(song)
+    return { success: true, queue: room.queue }
+  }
+
+  removeSongFromQueue(roomId, songId) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    room.queue = room.queue.filter((song) => song.id !== songId)
+    return { success: true, queue: room.queue }
+  }
+
+  getQueue(roomId) {
+    const room = this.rooms[roomId]
+    if (!room) return []
+    return room.queue
+  }
+
+  setCurrentSong(roomId, song) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    room.currentSong = song
+    return { success: true, currentSong: song }
+  }
+
+  getCurrentSong(roomId) {
+    const room = this.rooms[roomId]
+    if (!room) return null
+    return room.currentSong
   }
 
   joinRoom(roomId, userId, username) {
