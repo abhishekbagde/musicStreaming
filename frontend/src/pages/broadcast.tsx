@@ -14,12 +14,16 @@ export default function BroadcastPage() {
   const [roomName, setRoomName] = useState('')
   const [roomId, setRoomId] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
+  const [broadcastMode, setBroadcastMode] = useState<'microphone' | 'file'>('microphone')
   const [participants, setParticipants] = useState<Array<{ userId: string; username: string; isHost: boolean }>>([])
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [messageInput, setMessageInput] = useState('')
   const [error, setError] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const processorRef = useRef<ScriptProcessorNode | null>(null)
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const audioElementRef = useRef<HTMLAudioElement | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -106,31 +110,9 @@ export default function BroadcastPage() {
 
   const handleStartBroadcast = async () => {
     try {
-      let stream: MediaStream | null = null
-      
-      // Try audio-only capture first (no screen needed)
-      try {
-        console.log('Attempting audio-only capture...')
-        stream = await navigator.mediaDevices.getDisplayMedia({
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-          } as any,
-          video: false,
-        } as any)
-        console.log('Audio-only capture successful')
-      } catch (displayError) {
-        // Fallback to microphone if audio-only not supported
-        console.log('Audio-only not available, using microphone:', displayError)
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-          },
-        })
-      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      })
 
       const audioContext =
         new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -162,8 +144,60 @@ export default function BroadcastPage() {
         socket.emit('broadcast:start', { roomId })
       }
     } catch (err) {
-      setError('Audio capture access denied. Browser may not support audio capture.')
-      console.error('Error accessing audio:', err)
+      setError('Microphone access denied')
+      console.error('Error accessing microphone:', err)
+    }
+  }
+
+  const handlePlayMusicFile = async (file: File) => {
+    try {
+      setSelectedFile(file)
+      setError('')
+
+      const audioContext =
+        new (window.AudioContext || (window as any).webkitAudioContext)()
+      audioContextRef.current = audioContext
+
+      const arrayBuffer = await file.arrayBuffer()
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+
+      const source = audioContext.createBufferSource()
+      audioSourceRef.current = source
+      source.buffer = audioBuffer
+
+      const processor = audioContext.createScriptProcessor(4096, 2, 2)
+      processorRef.current = processor
+
+      source.connect(processor)
+      processor.connect(audioContext.destination)
+
+      processor.onaudioprocess = (event) => {
+        const audioData = event.inputBuffer.getChannelData(0)
+        if (roomId) {
+          socket.emit('broadcast:audio', {
+            roomId,
+            data: Array.from(audioData),
+            timestamp: Date.now(),
+            duration: 100,
+            quality: 'high',
+          })
+        }
+      }
+
+      source.start(0)
+      setIsRecording(true)
+
+      if (roomId) {
+        socket.emit('broadcast:start', { roomId })
+      }
+
+      // Auto stop when music ends
+      source.onended = () => {
+        handleStopBroadcast()
+      }
+    } catch (err) {
+      setError('Error playing music file. Make sure it\'s a valid audio file (MP3, WAV, OGG, etc.)')
+      console.error('Error playing music:', err)
     }
   }
 
@@ -174,7 +208,12 @@ export default function BroadcastPage() {
     if (audioContextRef.current) {
       audioContextRef.current.close()
     }
+    if (audioSourceRef.current) {
+      audioSourceRef.current.stop()
+      audioSourceRef.current = null
+    }
     setIsRecording(false)
+    setSelectedFile(null)
 
     if (roomId) {
       socket.emit('broadcast:stop', { roomId })
@@ -265,37 +304,84 @@ export default function BroadcastPage() {
             </div>
 
             {/* Info Banner */}
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-green-900">
-                <strong>🎵 How to stream audio:</strong>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-blue-900">
+                <strong>💡 Choose a broadcast mode:</strong>
                 <br/>
-                1. Click "Start Broadcast"
+                🎤 <strong>Microphone:</strong> Stream from your computer's microphone or system audio
                 <br/>
-                2. Your browser will ask to share audio
-                <br/>
-                3. Select your audio source (YouTube, Spotify, System Audio, etc.)
-                <br/>
-                4. ✅ Audio will automatically start streaming to all guests!
+                🎵 <strong>Upload Music:</strong> Upload MP3/WAV files to stream to your guests
               </p>
             </div>
 
+            {/* Broadcast Mode Selection */}
+            <div className="mb-6 flex gap-4 flex-wrap">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="broadcast-mode"
+                  checked={broadcastMode === 'microphone'}
+                  onChange={() => {
+                    setBroadcastMode('microphone')
+                    setSelectedFile(null)
+                  }}
+                  className="w-4 h-4"
+                />
+                <span className="text-gray-700 font-medium">🎤 Microphone Mode</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="broadcast-mode"
+                  checked={broadcastMode === 'file'}
+                  onChange={() => setBroadcastMode('file')}
+                  className="w-4 h-4"
+                />
+                <span className="text-gray-700 font-medium">🎵 Upload Music</span>
+              </label>
+            </div>
+
+            {/* File Upload Section */}
+            {broadcastMode === 'file' && !isRecording && (
+              <div className="mb-6">
+                <label className="block text-gray-700 font-bold mb-2">
+                  Select Music File (MP3, WAV, OGG, M4A)
+                </label>
+                <input
+                  type="file"
+                  accept="audio/*"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) {
+                      handlePlayMusicFile(e.target.files[0])
+                    }
+                  }}
+                  className="w-full px-4 py-2 border-2 border-dashed border-purple-300 rounded-lg cursor-pointer hover:border-purple-500"
+                />
+                {selectedFile && (
+                  <p className="text-sm text-green-600 mt-2">
+                    ✓ Selected: {selectedFile.name}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Broadcast Controls */}
             <div className="flex gap-4">
-              {!isRecording ? (
+              {!isRecording && broadcastMode === 'microphone' ? (
                 <button
                   onClick={handleStartBroadcast}
                   className="flex-1 bg-green-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-600 transition-colors"
                 >
-                  ▶️ Start Broadcast
+                  ▶️ Start Microphone
                 </button>
-              ) : (
+              ) : isRecording ? (
                 <button
                   onClick={handleStopBroadcast}
                   className="flex-1 bg-red-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-600 transition-colors"
                 >
                   ⏹️ Stop Broadcast
                 </button>
-              )}
+              ) : null}
             </div>
 
             {isRecording && (
