@@ -25,13 +25,6 @@ interface Participant {
   isHost: boolean
 }
 
-declare global {
-  interface Window {
-    YT?: any
-    onYouTubeIframeAPIReady?: () => void
-  }
-}
-
 const extractVideoId = (song: Song | null) => {
   if (!song) return null
   if (song.id && /^[a-zA-Z0-9_-]{8,15}$/.test(song.id)) {
@@ -78,43 +71,25 @@ export default function RoomPage() {
   const [isLive, setIsLive] = useState(false)
 
   // --- Player state ---
-  const playerRef = useRef<any>(null)
-  const [playerReady, setPlayerReady] = useState(false)
+  const [activeVideo, setActiveVideo] = useState<{ videoId: string; startSeconds: number } | null>(null)
   const [audioConsent, setAudioConsent] = useState(false)
-  const playbackRequestRef = useRef<{ song: Song; startedAt?: number } | null>(null)
-
-  const playSongNow = useCallback((song: Song, startedAt?: number) => {
-    if (!playerRef.current) return false
-    const videoId = extractVideoId(song)
-    if (!videoId) {
-      console.error('Missing video ID', song)
-      return false
-    }
-    const startSeconds = computeStartSeconds(startedAt)
-    try {
-      playerRef.current.loadVideoById({ videoId, startSeconds })
-      playerRef.current.playVideo()
-      setIsPlaying(true)
-      return true
-    } catch (err) {
-      console.error('Failed to start YouTube playback', err)
-      return false
-    }
-  }, [])
+  const playbackRequestRef = useRef<{ videoId: string; startSeconds: number } | null>(null)
 
   const queuePlayback = useCallback((song: Song, startedAt?: number) => {
-    if (audioConsent && playerReady && playerRef.current) {
-      const success = playSongNow(song, startedAt)
-      if (!success) {
-        playbackRequestRef.current = { song, startedAt }
-      } else {
-        playbackRequestRef.current = null
-      }
+    const videoId = extractVideoId(song)
+    if (!videoId) {
+      console.error('Unable to determine video ID for', song)
+      return
+    }
+    const payload = { videoId, startSeconds: computeStartSeconds(startedAt) }
+    if (audioConsent) {
+      setActiveVideo(payload)
+      playbackRequestRef.current = null
     } else {
-      playbackRequestRef.current = { song, startedAt }
+      playbackRequestRef.current = payload
     }
     setIsPlaying(true)
-  }, [audioConsent, playSongNow, playerReady])
+  }, [audioConsent])
 
   const enableAudio = useCallback(() => {
     if (audioConsent) return
@@ -194,9 +169,7 @@ export default function RoomPage() {
           queuePlayback(data.currentSong, data.playingFrom)
         } else {
           playbackRequestRef.current = null
-          if (playerRef.current?.stopVideo) {
-            playerRef.current.stopVideo()
-          }
+          setActiveVideo(null)
           setIsPlaying(false)
         }
       }
@@ -245,59 +218,11 @@ export default function RoomPage() {
   }, [audioConsent, enableAudio])
 
   useEffect(() => {
-    if (!audioConsent) return
-
-    const createPlayer = () => {
-      if (playerRef.current || !window.YT?.Player) return
-      playerRef.current = new window.YT.Player('guest-youtube-player', {
-        height: '1',
-        width: '1',
-        playerVars: {
-          autoplay: 0,
-          controls: 0,
-          rel: 0,
-          modestbranding: 1,
-          playsinline: 1,
-        },
-        events: {
-          onReady: () => setPlayerReady(true),
-        },
-      })
-    }
-
-    if (window.YT && window.YT.Player) {
-      createPlayer()
-    } else {
-      window.onYouTubeIframeAPIReady = () => {
-        window.onYouTubeIframeAPIReady = undefined
-        createPlayer()
-      }
-      if (!document.getElementById('youtube-iframe-api')) {
-        const tag = document.createElement('script')
-        tag.src = 'https://www.youtube.com/iframe_api'
-        tag.id = 'youtube-iframe-api'
-        document.body.appendChild(tag)
-      }
-    }
-
-    return () => {
-      window.onYouTubeIframeAPIReady = undefined
-      if (playerRef.current?.destroy) {
-        playerRef.current.destroy()
-        playerRef.current = null
-      }
-      setPlayerReady(false)
+    if (audioConsent && playbackRequestRef.current) {
+      setActiveVideo(playbackRequestRef.current)
+      playbackRequestRef.current = null
     }
   }, [audioConsent])
-
-  useEffect(() => {
-    if (!audioConsent || !playerReady || !playerRef.current) return
-    if (playbackRequestRef.current) {
-      const { song, startedAt } = playbackRequestRef.current
-      playbackRequestRef.current = null
-      playSongNow(song, startedAt)
-    }
-  }, [audioConsent, playerReady, playSongNow])
 
   // --- Chat Handler ---
   const handleSendMessage = (e: React.FormEvent) => {
@@ -326,11 +251,16 @@ export default function RoomPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-2 sm:p-4">
-      <div
-        id="guest-youtube-player"
-        className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none"
-        aria-hidden="true"
-      />
+      {activeVideo && (
+        <iframe
+          key={`${activeVideo.videoId}-${activeVideo.startSeconds}`}
+          title="Guest audio player"
+          src={`https://www.youtube.com/embed/${activeVideo.videoId}?autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1&start=${activeVideo.startSeconds}`}
+          allow="autoplay; encrypted-media"
+          className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none"
+          aria-hidden="true"
+        />
+      )}
       {!audioConsent && (
         <div className="fixed inset-x-0 bottom-0 md:top-0 md:bottom-auto z-10 px-4 pb-6 pt-2 pointer-events-none">
           <div className="max-w-md mx-auto bg-yellow-100 text-yellow-900 rounded-xl shadow-lg p-4 flex flex-col gap-3 pointer-events-auto">
