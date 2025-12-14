@@ -11,11 +11,16 @@ import { roomHandler } from './socket/roomHandler.js'
 
 dotenv.config()
 
+// Parse allowed origins from environment variable
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+
 const app = express()
 const httpServer = createServer(app)
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: process.env.SOCKET_ORIGIN || 'http://localhost:3000',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
   },
   transports: ['websocket', 'polling'],
@@ -25,7 +30,7 @@ const io = new SocketIOServer(httpServer, {
 app.use(express.json())
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: allowedOrigins,
     credentials: true,
   })
 )
