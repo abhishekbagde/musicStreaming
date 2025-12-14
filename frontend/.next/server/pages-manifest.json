@@ -1,9 +1,1 @@
-{
-  "/_app": "pages/_app.js",
-  "/_error": "pages/_error.js",
-  "/_document": "pages/_document.js",
-  "/": "pages/index.js",
-  "/browse": "pages/browse.js",
-  "/room/[roomId]": "pages/room/[roomId].js",
-  "/broadcast": "pages/broadcast.js"
-}
+{"/_app":"pages/_app.js","/browse":"pages/browse.html","/broadcast":"pages/broadcast.html","/_document":"pages/_document.js","/room/[roomId]":"pages/room/[roomId].html","/":"pages/index.html","/_error":"pages/_error.js","/404":"pages/404.html"}
