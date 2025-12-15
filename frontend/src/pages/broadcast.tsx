@@ -530,24 +530,30 @@ export default function BroadcastPage() {
             {searchResults.length > 0 && (
               <div className="mb-6 border border-white/10 rounded-2xl overflow-hidden bg-slate-950/60">
                 <div className="px-4 py-2 border-b border-white/5 font-semibold text-sm text-white/70">Search Results</div>
-                <ul className="max-h-72 overflow-y-auto divide-y divide-white/5">
+                <ul className="max-h-[55vh] sm:max-h-72 overflow-y-auto divide-y divide-white/5">
                   {searchResults.map((song) => (
                     <li key={song.id} className="hover:bg-white/5 transition-colors p-3">
-                      <div className="flex items-start gap-3">
-                        {song.thumbnail && (
-                          <img src={song.thumbnail} alt="thumbnail" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-white truncate">{song.title}</div>
-                          <div className="text-sm text-white/60 truncate">{song.author}</div>
-                          <div className="text-xs text-white/50">{song.duration || 'N/A'}</div>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                        <div className="flex items-center gap-3 sm:flex-1">
+                          {song.thumbnail && (
+                            <img
+                              src={song.thumbnail}
+                              alt={`${song.title} thumbnail`}
+                              className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="font-semibold text-white text-sm sm:text-base break-words">{song.title}</div>
+                            <div className="text-xs sm:text-sm text-white/60 break-words">{song.author}</div>
+                            <div className="text-xs text-white/50">{song.duration || 'N/A'}</div>
+                          </div>
                         </div>
                         <button
                           onClick={() => {
                             handleAddSong(song)
                             setSearchResults([]) // Close dropdown after adding
                           }}
-                          className="bg-emerald-500 text-slate-950 px-4 py-2 rounded-2xl font-bold flex-shrink-0 whitespace-nowrap"
+                          className="bg-emerald-500 text-slate-950 px-4 py-2 rounded-2xl font-semibold w-full sm:w-32 text-center tracking-wide"
                         >
                           + Add
                         </button>
