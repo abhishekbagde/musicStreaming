@@ -230,7 +230,7 @@ export default function BroadcastPage() {
           onReady: () => {
             if (!cancelled) setPlayerReady(true)
           },
-          onError: (event) => {
+          onError: (event: any) => {
             console.error('YouTube player error', event?.data)
           },
         },

@@ -299,7 +299,7 @@ export default function RoomPage() {
           onReady: () => {
             if (!cancelled) setPlayerReady(true)
           },
-          onError: (event) => console.error('YouTube player error', event?.data),
+          onError: (event: any) => console.error('YouTube player error', event?.data),
         },
       })
     }
