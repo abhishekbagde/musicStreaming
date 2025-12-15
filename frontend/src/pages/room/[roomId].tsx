@@ -398,12 +398,12 @@ export default function RoomPage() {
   // --- Render: Loading State ---
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-900 to-slate-900 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-900 to-slate-900 flex items-center justify-center px-3 sm:px-4">
         <div className="text-center text-white">
           <div className="inline-block animate-spin mb-4">
             <div className="w-12 h-12 border-4 border-white/30 border-t-purple-300 rounded-full"></div>
           </div>
-          <p className="text-lg">Connecting to room...</p>
+          <p className="text-base sm:text-lg">Connecting to room...</p>
         </div>
       </div>
     )
@@ -413,7 +413,7 @@ export default function RoomPage() {
   const nowPlaying = currentSong || (queue.length > 0 ? queue[0] : null)
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-900 text-white p-2 sm:p-6">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-900 text-white p-3 sm:p-4 lg:p-6">
       <div
         ref={registerPlayerContainer}
         className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none overflow-hidden"
@@ -439,58 +439,60 @@ export default function RoomPage() {
         </div>
       )}
       
-      <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-4 sm:gap-6">
+      <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
         {/* Main Player Area */}
-        <div className="md:col-span-2 space-y-4 sm:space-y-6">
+        <div className="lg:col-span-2 space-y-3 sm:space-y-4 lg:space-y-6">
           {/* Music Queue Card */}
-          <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-6">
-            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+          <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 flex items-center gap-2">
               <span>🎵</span> <span>Music Queue</span>
             </h2>
 
             {/* Now Playing */}
             {nowPlaying && (
               <div className="mb-6">
-                <div className="bg-gradient-to-r from-purple-600 to-indigo-700 rounded-3xl p-5 sm:p-6 text-white shadow-2xl border border-white/10">
-                  <div className="text-sm font-semibold tracking-wider mb-2 text-white/70">NOW PLAYING</div>
-                  <div className="text-2xl font-bold mb-2 truncate">{nowPlaying.title}</div>
-                  <div className="text-white/80 mb-4 truncate">{nowPlaying.author}</div>
+                <div className="bg-gradient-to-r from-purple-600 to-indigo-700 rounded-3xl p-4 sm:p-5 lg:p-6 text-white shadow-2xl border border-white/10">
+                  <div className="text-xs sm:text-sm font-semibold tracking-wider mb-2 text-white/70">NOW PLAYING</div>
+                  <div className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2 line-clamp-2">{nowPlaying.title}</div>
+                  <div className="text-sm sm:text-base text-white/80 mb-4 line-clamp-1">{nowPlaying.author}</div>
                 </div>
               </div>
             )}
 
             {/* Playlist Queue */}
             <div>
-              <h3 className="font-bold text-lg text-white mb-3">Queue ({queue.length})</h3>
+              <h3 className="font-bold text-lg sm:text-xl text-white mb-3">Queue ({queue.length})</h3>
               {queue.length === 0 ? (
-                <div className="bg-white/5 rounded-3xl p-8 text-center text-white/60 border border-white/10">
-                  <div className="text-4xl mb-2">🎧</div>
-                  <p>Waiting for host to add songs...</p>
+                <div className="bg-white/5 rounded-3xl p-6 sm:p-8 text-center text-white/60 border border-white/10">
+                  <div className="text-3xl sm:text-4xl mb-2">🎧</div>
+                  <p className="text-sm sm:text-base">Waiting for host to add songs...</p>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 sm:space-y-3">
                   {queue.map((song, idx) => {
                     const isCurrent = currentSong?.id === song.id
                     return (
                       <div
                         key={song.id}
-                        className={`flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-2xl border transition-colors ${
+                        className={`flex flex-col gap-3 p-3 rounded-2xl border transition-colors ${
                           isCurrent
                             ? 'bg-gradient-to-r from-purple-700/30 to-indigo-700/20 border-purple-400/40 shadow-lg'
                             : 'bg-slate-900/40 border-white/5'
                         }`}
                       >
-                        <div className="flex items-center gap-2 text-sm text-white/70">
-                          <span className="text-lg font-bold w-8 text-center">
-                            {isCurrent ? '▶️' : idx + 1}
-                          </span>
-                          <span className="text-xs uppercase tracking-wide px-2 py-1 rounded-full bg-white/5">
-                            {song.duration || 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-white truncate">{song.title}</div>
-                          <div className="text-sm text-white/60 truncate">{song.author}</div>
+                        <div className="flex items-start gap-2 sm:gap-3 min-w-0">
+                          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-white/70 flex-shrink-0">
+                            <span className="text-base sm:text-lg font-bold w-6 sm:w-8 text-center">
+                              {isCurrent ? '▶️' : idx + 1}
+                            </span>
+                            <span className="text-xs px-2 py-1 rounded-full bg-white/5 whitespace-nowrap">
+                              {song.duration || 'N/A'}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-white text-sm sm:text-base line-clamp-1">{song.title}</div>
+                            <div className="text-xs sm:text-sm text-white/60 line-clamp-1">{song.author}</div>
+                          </div>
                         </div>
                       </div>
                     )
@@ -501,15 +503,15 @@ export default function RoomPage() {
           </div>
 
           {/* Participants */}
-          <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-6">
-            <h2 className="text-xl font-bold mb-4 text-white">
-              Participants ({participants.length})
+          <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 text-white">
+              👥 Participants ({participants.length})
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
               {participants.map((p) => (
                 <div
                   key={p.userId}
-                  className="bg-white/10 px-3 py-2 rounded-2xl text-white font-semibold text-center text-sm border border-white/10"
+                  className="bg-white/10 px-3 sm:px-4 py-2 sm:py-3 rounded-2xl text-white font-semibold text-center text-xs sm:text-sm border border-white/10"
                 >
                   {p.isHost ? '🎤' : '👥'} {p.username}
                 </div>
@@ -519,27 +521,29 @@ export default function RoomPage() {
         </div>
 
         {/* Chat Sidebar */}
-        <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-6 flex flex-col h-auto md:h-[700px]">
-          <h2 className="text-xl font-bold mb-4">💬 Chat</h2>
+        <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6 flex flex-col h-auto lg:h-[700px]">
+          <h2 className="text-lg sm:text-xl font-bold mb-4">💬 Chat</h2>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto mb-4 space-y-3">
+          <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-1 sm:pr-2 max-h-[280px] sm:max-h-[360px] lg:max-h-none">
             {messages.length === 0 ? (
-              <p className="text-white/50 text-center text-sm">
+              <p className="text-white/50 text-center text-xs sm:text-sm">
                 No messages yet. Say hello!
               </p>
             ) : (
               messages.map((msg, idx) => (
-                <div key={idx} className="text-sm bg-white/5 rounded-2xl p-3 border border-white/5">
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-semibold text-purple-300">
+                <div key={idx} className="text-xs sm:text-sm bg-white/5 rounded-2xl p-3 border border-white/5">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="font-semibold text-purple-300 text-xs sm:text-sm">
                       {msg.isHost ? '🎤' : ''} {msg.username}
                     </span>
                     <span className="text-xs text-white/50">
                       {new Date(msg.timestamp).toLocaleTimeString()}
                     </span>
                   </div>
-                  <p className="text-white/80 ml-4">{msg.message}</p>
+                  <p className="text-white/80 ml-4 break-words text-xs sm:text-sm">
+                    {msg.message}
+                  </p>
                 </div>
               ))
             )}
@@ -552,11 +556,11 @@ export default function RoomPage() {
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
               placeholder="Type a message..."
-              className="flex-1 px-3 py-3 border border-white/10 rounded-2xl text-sm bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
+              className="flex-1 px-3 py-2 sm:py-3 border border-white/10 rounded-2xl text-xs sm:text-sm bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
             />
             <button
               type="submit"
-              className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-2xl font-semibold hover:opacity-90 transition text-sm"
+              className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 sm:px-4 py-2 sm:py-3 rounded-2xl font-semibold hover:opacity-90 transition text-xs sm:text-sm whitespace-nowrap"
             >
               Send
             </button>

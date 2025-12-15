@@ -463,21 +463,21 @@ export default function BroadcastPage() {
 
   if (!roomId) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-900 to-slate-900 flex items-center justify-center px-4">
-        <div className="bg-slate-900/85 border border-white/10 rounded-3xl shadow-2xl p-8 max-w-md w-full text-white">
-          <h1 className="text-3xl font-bold mb-6 gradient-text">
+      <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-900 to-slate-900 flex items-center justify-center px-3 sm:px-4">
+        <div className="bg-slate-900/85 border border-white/10 rounded-3xl shadow-2xl p-6 sm:p-8 max-w-md w-full text-white">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-6 gradient-text">
             🎤 Start Broadcasting
           </h1>
 
           {error && (
-            <div className="bg-red-500/20 border border-red-400/30 text-red-100 px-4 py-3 rounded-2xl mb-4">
+            <div className="bg-red-500/20 border border-red-400/30 text-red-100 px-4 py-3 rounded-2xl mb-4 text-sm">
               {error}
             </div>
           )}
 
           <form onSubmit={handleCreateRoom} className="space-y-4">
             <div>
-              <label className="block text-sm uppercase tracking-widest text-white/70 font-semibold mb-2">
+              <label className="block text-xs sm:text-sm uppercase tracking-widest text-white/70 font-semibold mb-2">
                 Room Name
               </label>
               <input
@@ -485,12 +485,12 @@ export default function BroadcastPage() {
                 value={roomName}
                 onChange={(e) => setRoomName(e.target.value)}
                 placeholder="e.g., My Music Night"
-                className="w-full px-4 py-3 border border-white/10 rounded-2xl bg-white/5 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                className="w-full px-4 py-3 border border-white/10 rounded-2xl bg-white/5 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-400 text-sm"
               />
             </div>
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-3 px-4 rounded-2xl hover:opacity-90 transition shadow-lg"
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-3 px-4 rounded-2xl hover:opacity-90 transition shadow-lg text-sm sm:text-base"
             >
               Create Room
             </button>
@@ -501,7 +501,7 @@ export default function BroadcastPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-900 text-white p-2 sm:p-6">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-900 text-white p-3 sm:p-4 lg:p-6">
       <div
         ref={registerPlayerContainer}
         className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none overflow-hidden"
@@ -528,28 +528,28 @@ export default function BroadcastPage() {
         </div>
       )}
 
-      <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-4 sm:gap-6">
+      <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
         {/* Main Area */}
-        <div className="md:col-span-2 space-y-4 sm:space-y-6">
+        <div className="lg:col-span-2 space-y-3 sm:space-y-4 lg:space-y-6">
           {/* --- YouTube Search & Playlist UI --- */}
-          <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-6">
-            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+          <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 flex items-center gap-2">
               <span>🎵</span> <span>Music Queue</span>
             </h2>
 
             {/* Search Bar */}
             <form onSubmit={handleYouTubeSearch} className="mb-6">
-              <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="flex flex-col gap-2 sm:gap-3 sm:flex-row">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search YouTube..."
-                  className="flex-1 px-4 py-3 border border-white/10 rounded-2xl bg-white/5 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400 text-base"
+                  className="w-full px-3 sm:px-4 py-3 border border-white/10 rounded-2xl bg-white/5 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400 text-sm sm:text-base"
                 />
                 <button
                   type="submit"
-                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3 rounded-2xl font-semibold transition shadow-lg text-base"
+                  className="w-full sm:w-auto bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 sm:px-6 py-3 rounded-2xl font-semibold transition shadow-lg text-sm sm:text-base whitespace-nowrap"
                 >
                   🔍 Search
                 </button>
@@ -559,22 +559,22 @@ export default function BroadcastPage() {
             {/* Search Results Dropdown */}
             {searchResults.length > 0 && (
               <div className="mb-6 border border-white/10 rounded-2xl overflow-hidden bg-slate-950/60">
-                <div className="px-4 py-2 border-b border-white/5 font-semibold text-sm text-white/70">Search Results</div>
-                <ul className="max-h-[55vh] sm:max-h-72 overflow-y-auto divide-y divide-white/5">
+                <div className="px-3 sm:px-4 py-2 border-b border-white/5 font-semibold text-xs sm:text-sm text-white/70">Search Results</div>
+                <ul className="max-h-[40vh] sm:max-h-[50vh] overflow-y-auto divide-y divide-white/5">
                   {searchResults.map((song) => (
                     <li key={song.id} className="hover:bg-white/5 transition-colors p-3">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-                        <div className="flex items-center gap-3 sm:flex-1">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
                           {song.thumbnail && (
                             <img
                               src={song.thumbnail}
                               alt={`${song.title} thumbnail`}
-                              className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
+                              className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover flex-shrink-0"
                             />
                           )}
                           <div className="flex-1 min-w-0 space-y-1">
-                            <div className="font-semibold text-white text-sm sm:text-base break-words">{song.title}</div>
-                            <div className="text-xs sm:text-sm text-white/60 break-words">{song.author}</div>
+                            <div className="font-semibold text-white text-sm sm:text-base line-clamp-2">{song.title}</div>
+                            <div className="text-xs sm:text-sm text-white/60 line-clamp-1">{song.author}</div>
                             <div className="text-xs text-white/50">{song.duration || 'N/A'}</div>
                           </div>
                         </div>
@@ -583,7 +583,7 @@ export default function BroadcastPage() {
                             handleAddSong(song)
                             setSearchResults([]) // Close dropdown after adding
                           }}
-                          className="bg-emerald-500 text-slate-950 px-4 py-2 rounded-2xl font-semibold w-full sm:w-32 text-center tracking-wide"
+                          className="w-full bg-emerald-500 text-slate-950 px-3 py-2 rounded-2xl font-semibold text-center tracking-wide text-sm hover:bg-emerald-400 transition"
                         >
                           + Add
                         </button>
@@ -597,28 +597,28 @@ export default function BroadcastPage() {
             {/* Now Playing */}
             {nowPlaying && (
               <div className="mb-6">
-                <div className="bg-gradient-to-r from-purple-600 to-indigo-700 rounded-3xl p-5 sm:p-6 text-white shadow-2xl border border-white/10">
-                  <div className="text-sm font-semibold tracking-wider mb-2 text-white/70">NOW PLAYING</div>
-                  <div className="text-2xl font-bold mb-2 truncate">{nowPlaying.title}</div>
-                  <div className="text-white/80 mb-4 truncate">{nowPlaying.author}</div>
+                <div className="bg-gradient-to-r from-purple-600 to-indigo-700 rounded-3xl p-4 sm:p-5 lg:p-6 text-white shadow-2xl border border-white/10">
+                  <div className="text-xs sm:text-sm font-semibold tracking-wider mb-2 text-white/70">NOW PLAYING</div>
+                  <div className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2 line-clamp-2">{nowPlaying.title}</div>
+                  <div className="text-sm sm:text-base text-white/80 mb-4 line-clamp-1">{nowPlaying.author}</div>
 
                   {isHost && (
-                    <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                       <button
                         onClick={handlePrevious}
-                        className="bg-purple-900/70 text-white px-6 py-2 rounded-2xl font-semibold hover:bg-purple-800 transition flex-1"
+                        className="bg-purple-900/70 text-white px-4 py-2 sm:py-3 rounded-2xl font-semibold hover:bg-purple-800 transition text-sm sm:text-base"
                       >
                         ⏮️ Previous
                       </button>
                       <button
                         onClick={handleTogglePlayback}
-                        className="bg-white/90 text-purple-700 px-6 py-2 rounded-2xl font-semibold hover:bg-white transition flex-1"
+                        className="bg-white/90 text-purple-700 px-4 py-2 sm:py-3 rounded-2xl font-semibold hover:bg-white transition text-sm sm:text-base"
                       >
                         {isPlaying ? '⏸️ Pause' : currentSong ? '▶️ Resume' : '▶️ Play'}
                       </button>
                       <button
                         onClick={handleSkip}
-                        className="bg-purple-900/70 text-white px-6 py-2 rounded-2xl font-semibold hover:bg-purple-800 transition flex-1"
+                        className="bg-purple-900/70 text-white px-4 py-2 sm:py-3 rounded-2xl font-semibold hover:bg-purple-800 transition text-sm sm:text-base"
                       >
                         ⏭️ Next
                       </button>
@@ -630,42 +630,44 @@ export default function BroadcastPage() {
 
             {/* Playlist Queue */}
             <div>
-              <h3 className="font-bold text-lg text-white mb-3">Queue ({queue.length})</h3>
+              <h3 className="font-bold text-lg sm:text-xl text-white mb-3">Queue ({queue.length})</h3>
               {queue.length === 0 ? (
-                <div className="bg-white/5 rounded-3xl p-8 text-center text-white/60 border border-white/10">
-                  <div className="text-4xl mb-2">🎵</div>
-                  <p>No songs in queue yet. Search and add some!</p>
+                <div className="bg-white/5 rounded-3xl p-6 sm:p-8 text-center text-white/60 border border-white/10">
+                  <div className="text-3xl sm:text-4xl mb-2">🎵</div>
+                  <p className="text-sm sm:text-base">No songs in queue yet. Search and add some!</p>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 sm:space-y-3">
                   {queue.map((song, idx) => {
                     const isCurrent = currentSong?.id === song.id
                     return (
                       <div
                         key={song.id}
-                        className={`flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-2xl border transition-colors ${
+                        className={`flex flex-col gap-3 p-3 rounded-2xl border transition-colors ${
                           isCurrent
                             ? 'bg-gradient-to-r from-purple-700/30 to-indigo-700/20 border-purple-400/40 shadow-lg'
                             : 'bg-slate-900/40 border-white/5 hover:bg-slate-900/70'
                         }`}
                       >
-                        <div className="flex items-center gap-2 text-sm text-white/70">
-                          <span className="text-lg font-bold w-8 text-center">
-                            {isCurrent ? '▶️' : idx + 1}
-                          </span>
-                          <span className="text-xs uppercase tracking-wide px-2 py-1 rounded-full bg-white/5">
-                            {song.duration || 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-white truncate">{song.title}</div>
-                          <div className="text-sm text-white/60 truncate">{song.author}</div>
+                        <div className="flex items-start gap-2 sm:gap-3 min-w-0">
+                          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-white/70 flex-shrink-0">
+                            <span className="text-base sm:text-lg font-bold w-6 sm:w-8 text-center">
+                              {isCurrent ? '▶️' : idx + 1}
+                            </span>
+                            <span className="text-xs px-2 py-1 rounded-full bg-white/5 whitespace-nowrap">
+                              {song.duration || 'N/A'}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-white text-sm sm:text-base line-clamp-1">{song.title}</div>
+                            <div className="text-xs sm:text-sm text-white/60 line-clamp-1">{song.author}</div>
+                          </div>
                         </div>
                         {isHost && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <button
                               onClick={() => handlePlaySpecific(song.id)}
-                              className={`px-3 py-2 rounded-2xl text-sm font-semibold transition ${
+                              className={`flex-1 min-w-[80px] px-3 py-2 rounded-2xl text-xs sm:text-sm font-semibold transition ${
                                 isCurrent
                                   ? 'bg-white text-purple-700'
                                   : 'bg-emerald-500/90 text-slate-950 hover:bg-emerald-400'
@@ -675,7 +677,7 @@ export default function BroadcastPage() {
                             </button>
                             <button
                               onClick={() => handleRemoveSong(song.id)}
-                              className="bg-red-500/80 hover:bg-red-500 text-white px-3 py-2 rounded-2xl transition"
+                              className="bg-red-500/80 hover:bg-red-500 text-white px-3 py-2 rounded-2xl transition text-xs sm:text-sm font-semibold"
                               title="Remove"
                             >
                               ✕
@@ -690,10 +692,10 @@ export default function BroadcastPage() {
             </div>
           </div>
           {/* Room Info */}
-          <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-6 space-y-4">
+          <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <h2 className="text-2xl font-bold">🎤 Room</h2>
-              <div className="text-sm text-white/60">ID: {roomId?.slice(-8)}</div>
+              <h2 className="text-xl sm:text-2xl font-bold">🎤 Room</h2>
+              <div className="text-xs sm:text-sm text-white/60">ID: {roomId?.slice(-8)}</div>
             </div>
             
             <button
@@ -701,22 +703,22 @@ export default function BroadcastPage() {
                 navigator.clipboard.writeText(`${window.location.origin}/browse`)
                 alert('Browse link copied!')
               }}
-              className="w-full bg-gradient-to-r from-blue-500 to-cyan-400 text-white font-semibold py-3 px-4 rounded-2xl shadow-lg hover:opacity-90 transition mb-4"
+              className="w-full bg-gradient-to-r from-blue-500 to-cyan-400 text-white font-semibold py-3 px-4 rounded-2xl shadow-lg hover:opacity-90 transition text-sm sm:text-base"
             >
               📋 Copy Browse Link for Guests
             </button>
 
             {/* Participants */}
             <div>
-              <h3 className="font-bold text-lg mb-3 text-white/80">Participants ({participants.length})</h3>
+              <h3 className="font-bold text-base sm:text-lg mb-3 text-white/80">Participants ({participants.length})</h3>
               {participants.length === 0 ? (
-                <p className="text-white/50 text-center py-4">Waiting for guests...</p>
+                <p className="text-white/50 text-center py-4 text-sm">Waiting for guests...</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {participants.map((p) => (
                     <div
                       key={p.userId}
-                      className="bg-white/10 text-white px-4 py-2 rounded-full font-semibold text-sm border border-white/10"
+                      className="bg-white/10 text-white px-3 sm:px-4 py-2 rounded-full font-semibold text-xs sm:text-sm border border-white/10"
                     >
                       {p.isHost ? '🎤' : '👥'} {p.username}
                     </div>
@@ -728,27 +730,27 @@ export default function BroadcastPage() {
         </div>
 
         {/* Chat Sidebar */}
-        <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-6 flex flex-col h-auto md:h-[720px]">
-          <h2 className="text-xl font-bold mb-4">💬 Chat</h2>
+        <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6 flex flex-col h-auto lg:h-[720px]">
+          <h2 className="text-lg sm:text-xl font-bold mb-4">💬 Chat</h2>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-1 sm:pr-2 max-h-[360px] md:max-h-none">
+          <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-1 sm:pr-2 max-h-[280px] sm:max-h-[360px] lg:max-h-none">
             {messages.length === 0 ? (
-              <p className="text-white/50 text-center text-sm">
+              <p className="text-white/50 text-center text-xs sm:text-sm">
                 No messages yet. Start chatting!
               </p>
             ) : (
               messages.map((msg, idx) => (
-                <div key={idx} className="text-sm bg-white/5 rounded-2xl p-3 border border-white/5">
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-semibold text-purple-300">
+                <div key={idx} className="text-xs sm:text-sm bg-white/5 rounded-2xl p-3 border border-white/5">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="font-semibold text-purple-300 text-xs sm:text-sm">
                       {msg.isHost ? '🎤' : ''} {msg.username}
                     </span>
                     <span className="text-xs text-white/50">
                       {new Date(msg.timestamp).toLocaleTimeString()}
                     </span>
                   </div>
-                  <p className="text-white/80 ml-4 break-words">
+                  <p className="text-white/80 ml-4 break-words text-xs sm:text-sm">
                     {msg.message}
                   </p>
                 </div>
@@ -764,11 +766,11 @@ export default function BroadcastPage() {
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
               placeholder="Type a message..."
-              className="flex-1 px-3 py-3 border border-white/10 rounded-2xl text-sm bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
+              className="flex-1 px-3 py-2 sm:py-3 border border-white/10 rounded-2xl text-xs sm:text-sm bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
             />
             <button
               type="submit"
-              className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-2xl font-semibold hover:opacity-90 transition text-sm"
+              className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 sm:px-4 py-2 sm:py-3 rounded-2xl font-semibold hover:opacity-90 transition text-xs sm:text-sm whitespace-nowrap"
             >
               Send
             </button>
