@@ -89,7 +89,6 @@ export default function RoomPage() {
       setPlayerContainerReady(true)
     }
   }, [])
-  const [playerContainerReady, setPlayerContainerReady] = useState(false)
   const [playerReady, setPlayerReady] = useState(false)
   const pendingPlayerInitRef = useRef<Promise<void> | null>(null)
 
@@ -108,7 +107,11 @@ export default function RoomPage() {
     try {
       console.log('🎬 [guest] Starting playback via player', { videoId, startSeconds })
       playerRef.current.loadVideoById({ videoId, startSeconds })
-      playerRef.current.unMute?.()
+      if (audioConsent) {
+        playerRef.current.unMute?.()
+      } else {
+        playerRef.current.mute?.()
+      }
       playerRef.current.playVideo?.()
     } catch (err) {
       console.error('Failed to start playback', err)
