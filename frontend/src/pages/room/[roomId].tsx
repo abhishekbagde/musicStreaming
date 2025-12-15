@@ -81,11 +81,20 @@ export default function RoomPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const playerRef = useRef<any>(null)
   const playerContainerRef = useRef<HTMLDivElement | null>(null)
+  const [playerContainerReady, setPlayerContainerReady] = useState(false)
+
+  const registerPlayerContainer = useCallback((node: HTMLDivElement | null) => {
+    playerContainerRef.current = node
+    if (node) {
+      setPlayerContainerReady(true)
+    }
+  }, [])
+  const [playerContainerReady, setPlayerContainerReady] = useState(false)
   const [playerReady, setPlayerReady] = useState(false)
   const pendingPlayerInitRef = useRef<Promise<void> | null>(null)
 
   const flushPendingPlayback = useCallback(() => {
-    if (!audioConsent || !playerReady || !playerRef.current) return
+    if (!playerReady || !playerRef.current) return
     if (!playbackRequestRef.current) {
       console.log('🎬 [guest] No pending playback to flush', {
         audioConsent,
@@ -316,19 +325,18 @@ export default function RoomPage() {
   }, [flushPendingPlayback])
 
   useEffect(() => {
-    if (!audioConsent) return
-    if (playerRef.current || !playerContainerRef.current) return
+    if (playerRef.current || !playerContainerReady || !playerContainerRef.current) return
     if (pendingPlayerInitRef.current) return
     let cancelled = false
-    console.log('🧩 [guest] Initialising YouTube player', {
-      pending: !!pendingPlayerInitRef.current,
+    console.log('🧩 [guest] Initialising YouTube player (eager)', {
+      consent: audioConsent,
       hasContainer: !!playerContainerRef.current,
     })
 
     pendingPlayerInitRef.current = loadYouTubeIframeAPI()
       .then(() => {
         if (cancelled || playerRef.current || !playerContainerRef.current) return
-        console.log('🧩 [guest] Creating YT.Player instance')
+        console.log('🧩 [guest] Creating YT.Player instance (eager)')
         playerRef.current = new window.YT.Player(playerContainerRef.current, {
           height: '0',
           width: '0',
@@ -339,11 +347,12 @@ export default function RoomPage() {
             rel: 0,
             modestbranding: 1,
             playsinline: 1,
+            mute: 1,
           },
           events: {
             onReady: () => {
               if (!cancelled) {
-                console.log('🧩 [guest] Player ready')
+                console.log('🧩 [guest] Player ready (eager)')
                 setPlayerReady(true)
                 flushPendingPlayback()
               }
@@ -362,7 +371,7 @@ export default function RoomPage() {
     return () => {
       cancelled = true
     }
-  }, [audioConsent, flushPendingPlayback])
+  }, [audioConsent, flushPendingPlayback, playerContainerReady])
 
   useEffect(() => {
     return () => {
@@ -399,7 +408,7 @@ export default function RoomPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-900 text-white p-2 sm:p-6">
       <div
-        ref={playerContainerRef}
+        ref={registerPlayerContainer}
         className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none overflow-hidden"
         aria-hidden="true"
       />

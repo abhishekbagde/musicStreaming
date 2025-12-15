@@ -84,11 +84,20 @@ export default function BroadcastPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const playerRef = useRef<any>(null)
   const playerContainerRef = useRef<HTMLDivElement | null>(null)
+  const [playerContainerReady, setPlayerContainerReady] = useState(false)
+
+  const registerPlayerContainer = useCallback((node: HTMLDivElement | null) => {
+    playerContainerRef.current = node
+    if (node) {
+      setPlayerContainerReady(true)
+    }
+  }, [])
   const [playerReady, setPlayerReady] = useState(false)
   const pendingPlayerInitRef = useRef<Promise<void> | null>(null)
+  const [playerInitAttempted, setPlayerInitAttempted] = useState(false)
 
   const flushPendingPlayback = useCallback(() => {
-    if (!audioConsent || !playerReady || !playerRef.current) {
+    if (!playerReady || !playerRef.current) {
       return
     }
     if (!playbackRequestRef.current) {
@@ -104,7 +113,11 @@ export default function BroadcastPage() {
     try {
       console.log('🎬 Starting playback via player', { videoId, startSeconds })
       playerRef.current.loadVideoById({ videoId, startSeconds })
-      playerRef.current.unMute?.()
+      if (audioConsent) {
+        playerRef.current.unMute?.()
+      } else {
+        playerRef.current.mute?.()
+      }
       playerRef.current.playVideo?.()
     } catch (err) {
       console.error('Failed to start YouTube playback', err)
@@ -239,19 +252,18 @@ export default function BroadcastPage() {
   }, [flushPendingPlayback])
 
   useEffect(() => {
-    if (!audioConsent) return
-    if (playerRef.current || !playerContainerRef.current) return
+    if (playerRef.current || !playerContainerReady || !playerContainerRef.current) return
     if (pendingPlayerInitRef.current) return
     let cancelled = false
-    console.log('🧩 Initialising YouTube player', {
-      pending: !!pendingPlayerInitRef.current,
+    console.log('🧩 Initialising YouTube player (eager)', {
+      consent: audioConsent,
       hasContainer: !!playerContainerRef.current,
     })
 
     pendingPlayerInitRef.current = loadYouTubeIframeAPI()
       .then(() => {
         if (cancelled || playerRef.current || !playerContainerRef.current) return
-        console.log('🧩 Creating YT.Player instance')
+        console.log('🧩 Creating YT.Player instance (eager)')
         playerRef.current = new window.YT.Player(playerContainerRef.current, {
           height: '0',
           width: '0',
@@ -262,12 +274,12 @@ export default function BroadcastPage() {
             rel: 0,
             modestbranding: 1,
             playsinline: 1,
-            mute: 0,
+            mute: 1,
           },
           events: {
             onReady: () => {
               if (!cancelled) {
-                console.log('🧩 Player ready')
+                console.log('🧩 Player ready (eager)')
                 setPlayerReady(true)
                 flushPendingPlayback()
               }
@@ -283,12 +295,13 @@ export default function BroadcastPage() {
       })
       .finally(() => {
         pendingPlayerInitRef.current = null
+        setPlayerInitAttempted(true)
       })
 
     return () => {
       cancelled = true
     }
-  }, [audioConsent, flushPendingPlayback])
+  }, [audioConsent, flushPendingPlayback, playerContainerReady])
 
   useEffect(() => {
     return () => {
@@ -346,41 +359,8 @@ export default function BroadcastPage() {
       console.error('Failed to unlock audio context', err)
     } finally {
       setAudioConsent(true)
-      setTimeout(() => flushPendingPlayback(), 0)
-      if (!playerRef.current && !pendingPlayerInitRef.current && playerContainerRef.current) {
-        console.log('🧩 Consent granted, kickstarting player init')
-        pendingPlayerInitRef.current = loadYouTubeIframeAPI()
-          .then(() => {
-            if (playerRef.current || !playerContainerRef.current) return
-            playerRef.current = new window.YT.Player(playerContainerRef.current, {
-              height: '0',
-              width: '0',
-              videoId: 'M7lc1UVf-VE',
-              playerVars: {
-                autoplay: 0,
-                controls: 0,
-                rel: 0,
-                modestbranding: 1,
-                playsinline: 1,
-                mute: 0,
-              },
-              events: {
-                onReady: () => {
-                  console.log('🧩 Player ready (via consent init)')
-                  setPlayerReady(true)
-                  flushPendingPlayback()
-                },
-                onError: (event: any) => console.error('YouTube player error', event?.data),
-              },
-            })
-          })
-          .catch((err) => {
-            console.error('Failed to load YouTube iframe API', err)
-          })
-          .finally(() => {
-            pendingPlayerInitRef.current = null
-          })
-      }
+      flushPendingPlayback()
+      playerRef.current?.unMute?.()
     }
   }, [audioConsent, flushPendingPlayback])
 
@@ -493,7 +473,7 @@ export default function BroadcastPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-900 text-white p-2 sm:p-6">
       <div
-        ref={playerContainerRef}
+        ref={registerPlayerContainer}
         className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none overflow-hidden"
         aria-hidden="true"
       />
