@@ -208,20 +208,6 @@ export default function BroadcastPage() {
   }, [audioConsent, playerReady])
 
   useEffect(() => {
-    if (audioConsent) return
-    if (typeof window === 'undefined') return
-    const handler = () => {
-      enableAudio()
-    }
-    window.addEventListener('touchend', handler, { passive: true, once: true })
-    window.addEventListener('click', handler, { once: true })
-    return () => {
-      window.removeEventListener('touchend', handler)
-      window.removeEventListener('click', handler)
-    }
-  }, [audioConsent, enableAudio])
-
-  useEffect(() => {
     if (!audioConsent) return
     if (playerRef.current || !playerContainerRef.current) return
     let cancelled = false
@@ -327,6 +313,20 @@ export default function BroadcastPage() {
       setAudioConsent(true)
     }
   }, [audioConsent])
+
+  useEffect(() => {
+    if (audioConsent) return
+    if (typeof window === 'undefined') return
+    const handler = () => {
+      enableAudio()
+    }
+    window.addEventListener('touchend', handler, { passive: true, once: true })
+    window.addEventListener('click', handler, { once: true })
+    return () => {
+      window.removeEventListener('touchend', handler)
+      window.removeEventListener('click', handler)
+    }
+  }, [audioConsent, enableAudio])
 
   const handleAddSong = (song: Song) => {
     if (!roomId) return
