@@ -82,7 +82,6 @@ export default function RoomPage() {
   const playerRef = useRef<any>(null)
   const playerContainerRef = useRef<HTMLDivElement | null>(null)
   const [playerContainerReady, setPlayerContainerReady] = useState(false)
-
   const registerPlayerContainer = useCallback((node: HTMLDivElement | null) => {
     playerContainerRef.current = node
     if (node) {
@@ -164,40 +163,10 @@ export default function RoomPage() {
       console.error('Failed to unlock audio context', err)
     } finally {
       setAudioConsent(true)
-      triggerPendingPlayback()
-      if (!playerRef.current && !pendingPlayerInitRef.current && playerContainerRef.current) {
-        console.log('🧩 [guest] Consent granted, kickstarting player init')
-        pendingPlayerInitRef.current = loadYouTubeIframeAPI()
-          .then(() => {
-            if (playerRef.current || !playerContainerRef.current) return
-            playerRef.current = new window.YT.Player(playerContainerRef.current, {
-              height: '0',
-              width: '0',
-              videoId: 'M7lc1UVf-VE',
-              playerVars: {
-                autoplay: 0,
-                controls: 0,
-                rel: 0,
-                modestbranding: 1,
-                playsinline: 1,
-              },
-              events: {
-                onReady: () => {
-                  console.log('🧩 [guest] Player ready (via consent init)')
-                  setPlayerReady(true)
-                  flushPendingPlayback()
-                },
-                onError: (event: any) => console.error('YouTube player error', event?.data),
-              },
-            })
-          })
-          .catch((err) => console.error('Failed to load YouTube iframe API', err))
-          .finally(() => {
-            pendingPlayerInitRef.current = null
-          })
-      }
+      flushPendingPlayback()
+      playerRef.current?.unMute?.()
     }
-  }, [audioConsent, triggerPendingPlayback, flushPendingPlayback])
+  }, [audioConsent, flushPendingPlayback])
 
   // --- Socket.io Listeners ---
   useEffect(() => {
