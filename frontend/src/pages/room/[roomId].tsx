@@ -73,6 +73,8 @@ export default function RoomPage() {
 
   // --- Player state ---
   const [audioConsent, setAudioConsent] = useState(false)
+  const [audioConsentNeeded, setAudioConsentNeeded] = useState(false)
+  const pendingPlaybackOnConsentRef = useRef<{ song: Song; startedAt: number } | null>(null)
   const playbackRequestRef = useRef<{ videoId: string; startSeconds: number; startedAt: number } | null>(null)
   const playbackMetaRef = useRef<{ videoId: string | null; startedAt: number | null }>({
     videoId: null,
@@ -123,6 +125,18 @@ export default function RoomPage() {
       console.error('Unable to determine video ID for', song)
       return
     }
+    
+    // Check if we need audio consent (mobile browser policy)
+    if (!audioConsent && typeof window !== 'undefined') {
+      const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      if (isMobileOrTablet) {
+        console.log('📱 [guest] Audio consent needed on mobile')
+        pendingPlaybackOnConsentRef.current = { song, startedAt: startedAt || Date.now() }
+        setAudioConsentNeeded(true)
+        return
+      }
+    }
+    
     const safeStart = startedAt || Date.now()
     const last = playbackMetaRef.current
     if (last.videoId === videoId && last.startedAt === safeStart) {
@@ -138,7 +152,7 @@ export default function RoomPage() {
     playbackRequestRef.current = payload
     flushPendingPlayback()
     setIsPlaying(true)
-  }, [flushPendingPlayback])
+  }, [audioConsent, flushPendingPlayback])
 
   const enableAudio = useCallback(async () => {
     if (audioConsent) return
@@ -163,10 +177,20 @@ export default function RoomPage() {
       console.error('Failed to unlock audio context', err)
     } finally {
       setAudioConsent(true)
-      flushPendingPlayback()
-      playerRef.current?.unMute?.()
+      setAudioConsentNeeded(false)
+      
+      // Retry pending playback if it exists
+      if (pendingPlaybackOnConsentRef.current) {
+        const { song, startedAt } = pendingPlaybackOnConsentRef.current
+        pendingPlaybackOnConsentRef.current = null
+        console.log('🔄 [guest] Retrying pending playback after audio consent')
+        queuePlayback(song, startedAt)
+      } else {
+        flushPendingPlayback()
+        playerRef.current?.unMute?.()
+      }
     }
-  }, [audioConsent, flushPendingPlayback])
+  }, [audioConsent, flushPendingPlayback, queuePlayback])
 
   // --- Socket.io Listeners ---
   useEffect(() => {
@@ -385,11 +409,11 @@ export default function RoomPage() {
         aria-hidden="true"
       />
       {!audioConsent && (
-        <div className="fixed inset-x-0 bottom-0 md:top-auto z-10 px-4 pb-6 pt-2 pointer-events-none">
+        <div className="fixed inset-x-0 bottom-0 z-20 px-4 pb-6 pt-2 pointer-events-none">
           <div className="max-w-md mx-auto bg-slate-900/90 border border-white/10 text-white rounded-3xl shadow-2xl p-4 flex flex-col gap-3 pointer-events-auto backdrop-blur">
             <div className="text-sm md:text-base font-semibold flex items-center gap-2 justify-center text-white/80">
               <span role="img" aria-label="speaker">🔊</span>
-              Tap once to sync audio with the host
+              Tap once to enable audio playback
             </div>
             <button
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-2 rounded-2xl text-base shadow-lg"
@@ -398,7 +422,7 @@ export default function RoomPage() {
               Enable Audio
             </button>
             <p className="text-xs md:text-sm text-white/60 text-center">
-              Mobile browsers require a quick tap before playback is allowed. You only need to do this once per visit.
+              Mobile browsers block autoplay until you interact. Tap once to unlock playback for this session.
             </p>
           </div>
         </div>
