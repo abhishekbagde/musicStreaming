@@ -2,6 +2,13 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import { socket } from '@/utils/socketClient'
 
+declare global {
+  interface Window {
+    YT?: any
+    onYouTubeIframeAPIReady?: (() => void) | null
+  }
+}
+
 interface Song {
   id: string
   title: string
@@ -71,7 +78,6 @@ export default function RoomPage() {
   const [isLive, setIsLive] = useState(false)
 
   // --- Player state ---
-  const [activeVideo, setActiveVideo] = useState<{ videoId: string; startSeconds: number } | null>(null)
   const [audioConsent, setAudioConsent] = useState(false)
   const playbackRequestRef = useRef<{ videoId: string; startSeconds: number; startedAt: number } | null>(null)
   const playbackMetaRef = useRef<{ videoId: string | null; startedAt: number | null }>({
@@ -79,6 +85,9 @@ export default function RoomPage() {
     startedAt: null,
   })
   const audioContextRef = useRef<AudioContext | null>(null)
+  const playerRef = useRef<any>(null)
+  const playerContainerRef = useRef<HTMLDivElement | null>(null)
+  const [playerReady, setPlayerReady] = useState(false)
 
   const queuePlayback = useCallback((song: Song, startedAt?: number) => {
     const videoId = extractVideoId(song)
@@ -98,14 +107,15 @@ export default function RoomPage() {
       startedAt: safeStart,
     }
     playbackMetaRef.current = { videoId, startedAt: safeStart }
-    if (audioConsent) {
-      setActiveVideo({ videoId: payload.videoId, startSeconds: payload.startSeconds })
+    if (audioConsent && playerReady && playerRef.current) {
+      playerRef.current.loadVideoById({ videoId: payload.videoId, startSeconds: payload.startSeconds })
+      playerRef.current.playVideo?.()
       playbackRequestRef.current = null
     } else {
       playbackRequestRef.current = payload
     }
     setIsPlaying(true)
-  }, [audioConsent])
+  }, [audioConsent, playerReady])
 
   const enableAudio = useCallback(async () => {
     if (audioConsent) return
@@ -207,7 +217,7 @@ export default function RoomPage() {
         } else {
           playbackRequestRef.current = null
           playbackMetaRef.current = { videoId: null, startedAt: null }
-          setActiveVideo(null)
+          playerRef.current?.stopVideo?.()
           setIsPlaying(false)
         }
       }
@@ -258,11 +268,64 @@ export default function RoomPage() {
   }, [audioConsent, enableAudio])
 
   useEffect(() => {
-    if (audioConsent && playbackRequestRef.current) {
+    if (audioConsent && playerReady && playbackRequestRef.current && playerRef.current) {
       const { videoId, startSeconds, startedAt } = playbackRequestRef.current
       playbackMetaRef.current = { videoId, startedAt }
-      setActiveVideo({ videoId, startSeconds })
+      playerRef.current.loadVideoById({ videoId, startSeconds })
+      playerRef.current.playVideo?.()
       playbackRequestRef.current = null
+    }
+  }, [audioConsent, playerReady])
+
+  useEffect(() => {
+    if (!audioConsent) return
+    if (playerRef.current || !playerContainerRef.current) return
+    let cancelled = false
+
+    const createPlayer = () => {
+      if (cancelled || playerRef.current || !playerContainerRef.current) return
+      playerRef.current = new window.YT.Player(playerContainerRef.current, {
+        height: '0',
+        width: '0',
+        videoId: 'M7lc1UVf-VE',
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          rel: 0,
+          modestbranding: 1,
+          playsinline: 1,
+        },
+        events: {
+          onReady: () => {
+            if (!cancelled) setPlayerReady(true)
+          },
+          onError: (event) => console.error('YouTube player error', event?.data),
+        },
+      })
+    }
+
+    const setup = () => {
+      if (window.YT && window.YT.Player) {
+        createPlayer()
+      } else {
+        const prev = window.onYouTubeIframeAPIReady
+        window.onYouTubeIframeAPIReady = () => {
+          prev?.()
+          createPlayer()
+        }
+        if (!document.getElementById('youtube-iframe-api')) {
+          const tag = document.createElement('script')
+          tag.id = 'youtube-iframe-api'
+          tag.src = 'https://www.youtube.com/iframe_api'
+          document.body.appendChild(tag)
+        }
+      }
+    }
+
+    setup()
+
+    return () => {
+      cancelled = true
     }
   }, [audioConsent])
 
@@ -293,16 +356,11 @@ export default function RoomPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-900 text-white p-2 sm:p-6">
-      {activeVideo && (
-        <iframe
-          key={`${activeVideo.videoId}-${activeVideo.startSeconds}`}
-          title="Guest audio player"
-          src={`https://www.youtube.com/embed/${activeVideo.videoId}?autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1&start=${activeVideo.startSeconds}`}
-          allow="autoplay; encrypted-media"
-          className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none"
-          aria-hidden="true"
-        />
-      )}
+      <div
+        ref={playerContainerRef}
+        className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none overflow-hidden"
+        aria-hidden="true"
+      />
       {!audioConsent && (
         <div className="fixed inset-x-0 bottom-0 md:top-auto z-10 px-4 pb-6 pt-2 pointer-events-none">
           <div className="max-w-md mx-auto bg-slate-900/90 border border-white/10 text-white rounded-3xl shadow-2xl p-4 flex flex-col gap-3 pointer-events-auto backdrop-blur">

@@ -2,6 +2,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { socket } from '@/utils/socketClient'
 import { apiClient } from '@/utils/apiClient'
 
+declare global {
+  interface Window {
+    YT?: any
+    onYouTubeIframeAPIReady?: (() => void) | null
+  }
+}
+
 interface Song {
   id: string
   title: string
@@ -81,7 +88,9 @@ export default function BroadcastPage() {
   })
   const playbackRequestRef = useRef<{ videoId: string; startSeconds: number; startedAt: number } | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
-  const [activeVideo, setActiveVideo] = useState<{ videoId: string; startSeconds: number } | null>(null)
+  const playerRef = useRef<any>(null)
+  const playerContainerRef = useRef<HTMLDivElement | null>(null)
+  const [playerReady, setPlayerReady] = useState(false)
 
   // --- Scroll to bottom for chat ---
   const scrollToBottom = () => {
@@ -135,23 +144,27 @@ export default function BroadcastPage() {
             const last = playbackMetaRef.current
             playbackMetaRef.current = { videoId, startedAt }
             setIsPlaying(true)
-            if (!audioConsent) {
+            if (last.videoId === videoId && last.startedAt === startedAt) {
+              return
+            }
+            if (audioConsent && playerReady && playerRef.current) {
+              playerRef.current.loadVideoById({ videoId, startSeconds })
+              playerRef.current.playVideo?.()
+              playbackRequestRef.current = null
+            } else {
               playbackRequestRef.current = { videoId, startSeconds, startedAt }
-            } else if (!(last.videoId === videoId && last.startedAt === startedAt)) {
-              setActiveVideo({ videoId, startSeconds })
             }
           } else {
             console.error('Unable to determine video ID for', data.currentSong)
             playbackMetaRef.current = { videoId: null, startedAt: null }
             playbackRequestRef.current = null
-            setActiveVideo(null)
             setIsPlaying(false)
           }
         } else {
           playbackMetaRef.current = { videoId: null, startedAt: null }
           playbackRequestRef.current = null
-          setActiveVideo(null)
           setIsPlaying(false)
+          playerRef.current?.stopVideo?.()
         }
       }
     })
@@ -186,12 +199,13 @@ export default function BroadcastPage() {
   }, [participants])
 
   useEffect(() => {
-    if (audioConsent && playbackRequestRef.current) {
+    if (audioConsent && playerReady && playbackRequestRef.current && playerRef.current) {
       const { videoId, startSeconds } = playbackRequestRef.current
-      setActiveVideo({ videoId, startSeconds })
       playbackRequestRef.current = null
+      playerRef.current.loadVideoById({ videoId, startSeconds })
+      playerRef.current.playVideo?.()
     }
-  }, [audioConsent])
+  }, [audioConsent, playerReady])
 
   useEffect(() => {
     if (audioConsent) return
@@ -206,6 +220,61 @@ export default function BroadcastPage() {
       window.removeEventListener('click', handler)
     }
   }, [audioConsent, enableAudio])
+
+  useEffect(() => {
+    if (!audioConsent) return
+    if (playerRef.current || !playerContainerRef.current) return
+    let cancelled = false
+
+    const createPlayer = () => {
+      if (cancelled || playerRef.current || !playerContainerRef.current) return
+      playerRef.current = new window.YT.Player(playerContainerRef.current, {
+        height: '0',
+        width: '0',
+        videoId: 'M7lc1UVf-VE',
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          rel: 0,
+          modestbranding: 1,
+          playsinline: 1,
+          mute: 0,
+        },
+        events: {
+          onReady: () => {
+            if (!cancelled) setPlayerReady(true)
+          },
+          onError: (event) => {
+            console.error('YouTube player error', event?.data)
+          },
+        },
+      })
+    }
+
+    const setup = () => {
+      if (window.YT && window.YT.Player) {
+        createPlayer()
+      } else {
+        const previousCallback = window.onYouTubeIframeAPIReady
+        window.onYouTubeIframeAPIReady = () => {
+          previousCallback?.()
+          createPlayer()
+        }
+        if (!document.getElementById('youtube-iframe-api')) {
+          const tag = document.createElement('script')
+          tag.id = 'youtube-iframe-api'
+          tag.src = 'https://www.youtube.com/iframe_api'
+          document.body.appendChild(tag)
+        }
+      }
+    }
+
+    setup()
+
+    return () => {
+      cancelled = true
+    }
+  }, [audioConsent])
 
   // --- Room Management ---
   const handleCreateRoom = (e: React.FormEvent) => {
@@ -353,16 +422,11 @@ export default function BroadcastPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-900 text-white p-2 sm:p-6">
-      {activeVideo && (
-        <iframe
-          key={`${activeVideo.videoId}-${activeVideo.startSeconds}`}
-          title="YouTube audio player"
-          src={`https://www.youtube.com/embed/${activeVideo.videoId}?autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1&start=${activeVideo.startSeconds}`}
-          allow="autoplay; encrypted-media"
-          className="absolute w-[1px] h-[1px] overflow-hidden pointer-events-none opacity-0"
-          aria-hidden="true"
-        />
-      )}
+      <div
+        ref={playerContainerRef}
+        className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none overflow-hidden"
+        aria-hidden="true"
+      />
       
       {!audioConsent && (
         <div className="fixed inset-x-0 bottom-0 z-20 px-4 pb-6 pt-2 pointer-events-none">
