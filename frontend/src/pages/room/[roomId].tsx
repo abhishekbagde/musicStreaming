@@ -106,13 +106,19 @@ export default function RoomPage() {
     const { videoId, startSeconds } = playbackRequestRef.current
     playbackRequestRef.current = null
     try {
-      console.log('🎬 [guest] Starting playback via player', { videoId, startSeconds })
-      playerRef.current.loadVideoById({ videoId, startSeconds })
+      console.log('🎬 [guest] Starting playback via player', { videoId, startSeconds, audioConsent })
+      
+      // Unmute BEFORE loading video for mobile compatibility
       if (audioConsent) {
         playerRef.current.unMute?.()
+        console.log('🔊 [guest] Unmuting player')
       } else {
         playerRef.current.mute?.()
+        console.log('🔇 [guest] Muting player')
       }
+      
+      // Load and play the video
+      playerRef.current.loadVideoById({ videoId, startSeconds })
       playerRef.current.playVideo?.()
     } catch (err) {
       console.error('Failed to start playback', err)
@@ -173,6 +179,12 @@ export default function RoomPage() {
         oscillator.start()
         oscillator.stop(ctx.currentTime + 0.01)
       }
+      
+      // Unmute player while in user interaction context (important for mobile!)
+      if (playerRef.current) {
+        console.log('🔊 [guest] Unmuting player in enableAudio')
+        playerRef.current.unMute?.()
+      }
     } catch (err) {
       console.error('Failed to unlock audio context', err)
     } finally {
@@ -187,7 +199,6 @@ export default function RoomPage() {
         queuePlayback(song, startedAt)
       } else {
         flushPendingPlayback()
-        playerRef.current?.unMute?.()
       }
     }
   }, [audioConsent, flushPendingPlayback, queuePlayback])

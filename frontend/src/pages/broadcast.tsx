@@ -112,13 +112,19 @@ export default function BroadcastPage() {
     const { videoId, startSeconds } = playbackRequestRef.current
     playbackRequestRef.current = null
     try {
-      console.log('🎬 Starting playback via player', { videoId, startSeconds })
-      playerRef.current.loadVideoById({ videoId, startSeconds })
+      console.log('🎬 Starting playback via player', { videoId, startSeconds, audioConsent })
+      
+      // Unmute BEFORE loading video for mobile compatibility
       if (audioConsent) {
         playerRef.current.unMute?.()
+        console.log('🔊 Unmuting player')
       } else {
         playerRef.current.mute?.()
+        console.log('🔇 Muting player')
       }
+      
+      // Load and play the video
+      playerRef.current.loadVideoById({ videoId, startSeconds })
       playerRef.current.playVideo?.()
     } catch (err) {
       console.error('Failed to start YouTube playback', err)
@@ -374,12 +380,17 @@ export default function BroadcastPage() {
         oscillator.start()
         oscillator.stop(ctx.currentTime + 0.01)
       }
+      
+      // Unmute player while in user interaction context (important for mobile!)
+      if (playerRef.current) {
+        console.log('🔊 Unmuting player in enableAudio')
+        playerRef.current.unMute?.()
+      }
     } catch (err) {
       console.error('Failed to unlock audio context', err)
     } finally {
       setAudioConsent(true)
       flushPendingPlayback()
-      playerRef.current?.unMute?.()
     }
   }, [audioConsent, flushPendingPlayback])
 
