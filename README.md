@@ -319,4 +319,4 @@ Feel free to submit issues and enhancement requests!
 
 ## License
 
-MIT
+Apache License 2.0
