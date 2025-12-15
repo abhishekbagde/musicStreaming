@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import { socket } from '@/utils/socketClient'
+import { loadYouTubeIframeAPI } from '@/utils/youtubeLoader'
 
 interface Song {
   id: string
@@ -78,16 +79,23 @@ export default function RoomPage() {
     startedAt: null,
   })
   const audioContextRef = useRef<AudioContext | null>(null)
-  const [activeVideo, setActiveVideo] = useState<{ videoId: string; startSeconds: number; nonce: number } | null>(null)
+  const playerRef = useRef<any>(null)
+  const playerContainerRef = useRef<HTMLDivElement | null>(null)
+  const [playerReady, setPlayerReady] = useState(false)
+  const pendingPlayerInitRef = useRef<Promise<void> | null>(null)
 
-  const triggerPendingPlayback = useCallback(() => {
-    if (!audioConsent) return
-    if (playbackRequestRef.current) {
-      const { videoId, startSeconds } = playbackRequestRef.current
-      playbackRequestRef.current = null
-      setActiveVideo({ videoId, startSeconds, nonce: Date.now() })
+  const flushPendingPlayback = useCallback(() => {
+    if (!audioConsent || !playerReady || !playerRef.current || !playbackRequestRef.current) return
+    const { videoId, startSeconds } = playbackRequestRef.current
+    playbackRequestRef.current = null
+    try {
+      playerRef.current.loadVideoById({ videoId, startSeconds })
+      playerRef.current.unMute?.()
+      playerRef.current.playVideo?.()
+    } catch (err) {
+      console.error('Failed to start playback', err)
     }
-  }, [audioConsent])
+  }, [audioConsent, playerReady])
 
   const queuePlayback = useCallback((song: Song, startedAt?: number) => {
     const videoId = extractVideoId(song)
@@ -107,14 +115,10 @@ export default function RoomPage() {
       startedAt: safeStart,
     }
     playbackMetaRef.current = { videoId, startedAt: safeStart }
-    if (audioConsent) {
-      setActiveVideo({ videoId: payload.videoId, startSeconds: payload.startSeconds, nonce: Date.now() })
-      playbackRequestRef.current = null
-    } else {
-      playbackRequestRef.current = payload
-    }
+    playbackRequestRef.current = payload
+    flushPendingPlayback()
     setIsPlaying(true)
-  }, [audioConsent])
+  }, [flushPendingPlayback])
 
   const enableAudio = useCallback(async () => {
     if (audioConsent) return
@@ -139,9 +143,8 @@ export default function RoomPage() {
       console.error('Failed to unlock audio context', err)
     } finally {
       setAudioConsent(true)
-      triggerPendingPlayback()
     }
-  }, [audioConsent, triggerPendingPlayback])
+  }, [audioConsent])
 
   // --- Socket.io Listeners ---
   useEffect(() => {
@@ -217,7 +220,7 @@ export default function RoomPage() {
         } else {
           playbackRequestRef.current = null
           playbackMetaRef.current = { videoId: null, startedAt: null }
-          setActiveVideo(null)
+          playerRef.current?.stopVideo?.()
           setIsPlaying(false)
         }
       }
@@ -268,9 +271,58 @@ export default function RoomPage() {
   }, [audioConsent, enableAudio])
 
   useEffect(() => {
+    flushPendingPlayback()
+  }, [flushPendingPlayback])
+
+  useEffect(() => {
     if (!audioConsent) return
-    triggerPendingPlayback()
-  }, [audioConsent, triggerPendingPlayback])
+    if (playerRef.current || !playerContainerRef.current) return
+    if (pendingPlayerInitRef.current) return
+    let cancelled = false
+
+    pendingPlayerInitRef.current = loadYouTubeIframeAPI()
+      .then(() => {
+        if (cancelled || playerRef.current || !playerContainerRef.current) return
+        playerRef.current = new window.YT.Player(playerContainerRef.current, {
+          height: '0',
+          width: '0',
+          videoId: 'M7lc1UVf-VE',
+          playerVars: {
+            autoplay: 0,
+            controls: 0,
+            rel: 0,
+            modestbranding: 1,
+            playsinline: 1,
+          },
+          events: {
+            onReady: () => {
+              if (!cancelled) {
+                setPlayerReady(true)
+                flushPendingPlayback()
+              }
+            },
+            onError: (event: any) => console.error('YouTube player error', event?.data),
+          },
+        })
+      })
+      .catch((err) => {
+        console.error('Failed to load YouTube iframe API', err)
+      })
+      .finally(() => {
+        pendingPlayerInitRef.current = null
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [audioConsent, flushPendingPlayback])
+
+  useEffect(() => {
+    return () => {
+      playerRef.current?.destroy?.()
+      playerRef.current = null
+    }
+  }, [])
 
   // --- Chat Handler ---
   const handleSendMessage = (e: React.FormEvent) => {
@@ -299,16 +351,11 @@ export default function RoomPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-900 text-white p-2 sm:p-6">
-      {activeVideo && (
-        <iframe
-          key={`${activeVideo.videoId}-${activeVideo.nonce}`}
-          title="Guest audio player"
-          src={`https://www.youtube.com/embed/${activeVideo.videoId}?autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1&start=${activeVideo.startSeconds}`}
-          allow="autoplay; encrypted-media"
-          className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none overflow-hidden"
-          aria-hidden="true"
-        />
-      )}
+      <div
+        ref={playerContainerRef}
+        className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none overflow-hidden"
+        aria-hidden="true"
+      />
       {!audioConsent && (
         <div className="fixed inset-x-0 bottom-0 md:top-auto z-10 px-4 pb-6 pt-2 pointer-events-none">
           <div className="max-w-md mx-auto bg-slate-900/90 border border-white/10 text-white rounded-3xl shadow-2xl p-4 flex flex-col gap-3 pointer-events-auto backdrop-blur">
