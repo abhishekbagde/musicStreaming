@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { socket } from '@/utils/socketClient'
 import { apiClient } from '@/utils/apiClient'
 
@@ -71,6 +71,7 @@ export default function BroadcastPage() {
   const [error, setError] = useState('')
   const [isHost, setIsHost] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [audioConsent, setAudioConsent] = useState(false)
 
   // --- Refs ---
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -78,6 +79,8 @@ export default function BroadcastPage() {
     videoId: null,
     startedAt: null,
   })
+  const playbackRequestRef = useRef<{ videoId: string; startSeconds: number; startedAt: number } | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
   const [activeVideo, setActiveVideo] = useState<{ videoId: string; startSeconds: number } | null>(null)
 
   // --- Scroll to bottom for chat ---
@@ -128,24 +131,25 @@ export default function BroadcastPage() {
           const videoId = extractVideoId(data.currentSong)
           if (videoId) {
             const startedAt = data.playingFrom || Date.now()
+            const startSeconds = computeStartSeconds(startedAt)
             const last = playbackMetaRef.current
-            setIsPlaying(true)
-            if (last.videoId === videoId && last.startedAt === startedAt) {
-              return
-            }
             playbackMetaRef.current = { videoId, startedAt }
-            setActiveVideo({
-              videoId,
-              startSeconds: computeStartSeconds(startedAt),
-            })
+            setIsPlaying(true)
+            if (!audioConsent) {
+              playbackRequestRef.current = { videoId, startSeconds, startedAt }
+            } else if (!(last.videoId === videoId && last.startedAt === startedAt)) {
+              setActiveVideo({ videoId, startSeconds })
+            }
           } else {
             console.error('Unable to determine video ID for', data.currentSong)
             playbackMetaRef.current = { videoId: null, startedAt: null }
+            playbackRequestRef.current = null
             setActiveVideo(null)
             setIsPlaying(false)
           }
         } else {
           playbackMetaRef.current = { videoId: null, startedAt: null }
+          playbackRequestRef.current = null
           setActiveVideo(null)
           setIsPlaying(false)
         }
@@ -181,6 +185,28 @@ export default function BroadcastPage() {
     setIsHost(!!me?.isHost)
   }, [participants])
 
+  useEffect(() => {
+    if (audioConsent && playbackRequestRef.current) {
+      const { videoId, startSeconds } = playbackRequestRef.current
+      setActiveVideo({ videoId, startSeconds })
+      playbackRequestRef.current = null
+    }
+  }, [audioConsent])
+
+  useEffect(() => {
+    if (audioConsent) return
+    if (typeof window === 'undefined') return
+    const handler = () => {
+      enableAudio()
+    }
+    window.addEventListener('touchend', handler, { passive: true, once: true })
+    window.addEventListener('click', handler, { once: true })
+    return () => {
+      window.removeEventListener('touchend', handler)
+      window.removeEventListener('click', handler)
+    }
+  }, [audioConsent, enableAudio])
+
   // --- Room Management ---
   const handleCreateRoom = (e: React.FormEvent) => {
     e.preventDefault()
@@ -206,6 +232,32 @@ export default function BroadcastPage() {
       console.error('Search error:', err)
     }
   }
+
+  const enableAudio = useCallback(async () => {
+    if (audioConsent) return
+    try {
+      if (typeof window === 'undefined') return
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      if (AudioCtx) {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new AudioCtx()
+        }
+        await audioContextRef.current.resume()
+        const ctx = audioContextRef.current
+        const oscillator = ctx.createOscillator()
+        const gain = ctx.createGain()
+        gain.gain.value = 0.0001
+        oscillator.connect(gain)
+        gain.connect(ctx.destination)
+        oscillator.start()
+        oscillator.stop(ctx.currentTime + 0.01)
+      }
+    } catch (err) {
+      console.error('Failed to unlock audio context', err)
+    } finally {
+      setAudioConsent(true)
+    }
+  }, [audioConsent])
 
   const handleAddSong = (song: Song) => {
     if (!roomId) return
@@ -312,6 +364,26 @@ export default function BroadcastPage() {
         />
       )}
       
+      {!audioConsent && (
+        <div className="fixed inset-x-0 bottom-0 z-20 px-4 pb-6 pt-2 pointer-events-none">
+          <div className="max-w-md mx-auto bg-slate-900/90 border border-white/10 text-white rounded-3xl shadow-2xl p-4 flex flex-col gap-3 pointer-events-auto backdrop-blur">
+            <div className="text-sm md:text-base font-semibold flex items-center gap-2 justify-center text-white/80">
+              <span role="img" aria-label="speaker">🔊</span>
+              Tap once to enable audio playback
+            </div>
+            <button
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-2 rounded-2xl text-base shadow-lg"
+              onClick={enableAudio}
+            >
+              Enable Audio
+            </button>
+            <p className="text-xs md:text-sm text-white/60 text-center">
+              Mobile browsers block autoplay until you interact. Tap once to unlock playback for this session.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-4 sm:gap-6">
         {/* Main Area */}
         <div className="md:col-span-2 space-y-4 sm:space-y-6">

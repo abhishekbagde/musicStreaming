@@ -78,6 +78,7 @@ export default function RoomPage() {
     videoId: null,
     startedAt: null,
   })
+  const audioContextRef = useRef<AudioContext | null>(null)
 
   const queuePlayback = useCallback((song: Song, startedAt?: number) => {
     const videoId = extractVideoId(song)
@@ -106,9 +107,30 @@ export default function RoomPage() {
     setIsPlaying(true)
   }, [audioConsent])
 
-  const enableAudio = useCallback(() => {
+  const enableAudio = useCallback(async () => {
     if (audioConsent) return
-    setAudioConsent(true)
+    try {
+      if (typeof window === 'undefined') return
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      if (AudioCtx) {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new AudioCtx()
+        }
+        await audioContextRef.current.resume()
+        const ctx = audioContextRef.current
+        const oscillator = ctx.createOscillator()
+        const gain = ctx.createGain()
+        gain.gain.value = 0.0001
+        oscillator.connect(gain)
+        gain.connect(ctx.destination)
+        oscillator.start()
+        oscillator.stop(ctx.currentTime + 0.01)
+      }
+    } catch (err) {
+      console.error('Failed to unlock audio context', err)
+    } finally {
+      setAudioConsent(true)
+    }
   }, [audioConsent])
 
   // --- Socket.io Listeners ---
@@ -219,6 +241,8 @@ export default function RoomPage() {
 
   useEffect(() => {
     if (audioConsent) return
+
+    if (typeof window === 'undefined') return
 
     const handleFirstInteraction = () => {
       enableAudio()
