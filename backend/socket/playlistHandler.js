@@ -142,6 +142,57 @@ export const playlistHandler = (io, socket, roomManager) => {
     })
   })
 
+  socket.on('song:autoAdvance', (data) => {
+    const { roomId } = data
+    const room = roomManager.getRoom(roomId)
+    if (!room) {
+      return
+    }
+
+    if (room.hostId !== socket.id) {
+      return
+    }
+
+    const queue = roomManager.getQueue(roomId)
+    if (queue.length === 0) {
+      roomManager.setPlaybackState(roomId, false)
+      io.to(roomId).emit('playlist:update', {
+        queue: [],
+        currentSong: null,
+        playing: false,
+        playingFrom: null,
+      })
+      return
+    }
+
+    const result = roomManager.playNextSong(roomId)
+    if (!result.success) {
+      return
+    }
+
+    const updatedQueue = roomManager.getQueue(roomId)
+    if (!result.song) {
+      roomManager.setPlaybackState(roomId, false)
+      io.to(roomId).emit('playlist:update', {
+        queue: updatedQueue,
+        currentSong: null,
+        playing: false,
+        playingFrom: null,
+      })
+      return
+    }
+
+    const playingFrom = Date.now()
+    roomManager.setPlaybackState(roomId, true, playingFrom)
+
+    io.to(roomId).emit('playlist:update', {
+      queue: updatedQueue,
+      currentSong: result.song,
+      playing: true,
+      playingFrom,
+    })
+  })
+
   // Handle pausing current song
   socket.on('song:pause', (data) => {
     const { roomId } = data

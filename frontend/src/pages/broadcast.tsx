@@ -85,6 +85,7 @@ export default function BroadcastPage() {
   const playerRef = useRef<any>(null)
   const playerContainerRef = useRef<HTMLDivElement | null>(null)
   const [playerContainerReady, setPlayerContainerReady] = useState(false)
+  const latestRoomMetaRef = useRef<{ roomId: string | null; isHost: boolean }>({ roomId: null, isHost: false })
 
   const registerPlayerContainer = useCallback((node: HTMLDivElement | null) => {
     playerContainerRef.current = node
@@ -239,6 +240,10 @@ export default function BroadcastPage() {
   }, [participants])
 
   useEffect(() => {
+    latestRoomMetaRef.current = { roomId, isHost }
+  }, [roomId, isHost])
+
+  useEffect(() => {
     if (audioConsent && playerReady && playbackRequestRef.current && playerRef.current) {
       const { videoId, startSeconds } = playbackRequestRef.current
       playbackRequestRef.current = null
@@ -282,6 +287,20 @@ export default function BroadcastPage() {
                 console.log('🧩 Player ready (eager)')
                 setPlayerReady(true)
                 flushPendingPlayback()
+              }
+            },
+            onStateChange: (event: any) => {
+              if (!event || typeof window === 'undefined' || !window.YT || !window.YT.PlayerState) {
+                return
+              }
+              if (event.data === window.YT.PlayerState.ENDED) {
+                const meta = latestRoomMetaRef.current
+                if (!meta.roomId || !meta.isHost) {
+                  console.log('⏹️ Ignoring auto-advance - missing host context', meta)
+                  return
+                }
+                console.log('🔁 Current song ended, requesting auto advance')
+                socket.emit('song:autoAdvance', { roomId: meta.roomId })
               }
             },
             onError: (event: any) => {
