@@ -439,11 +439,11 @@ export default function RoomPage() {
         </div>
       )}
       
-      <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
+      <div className="w-full mx-auto grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 px-0 max-w-6xl">
         {/* Main Player Area */}
-        <div className="lg:col-span-2 space-y-3 sm:space-y-4 lg:space-y-6">
+        <div className="lg:col-span-2 space-y-3 sm:space-y-4 lg:space-y-6 w-full">
           {/* Music Queue Card */}
-          <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6">
+          <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6 w-full overflow-hidden">
             <h2 className="text-xl sm:text-2xl font-bold mb-4 flex items-center gap-2">
               <span>🎵</span> <span>Music Queue</span>
             </h2>
@@ -460,27 +460,27 @@ export default function RoomPage() {
             )}
 
             {/* Playlist Queue */}
-            <div>
+            <div className="w-full">
               <h3 className="font-bold text-lg sm:text-xl text-white mb-3">Queue ({queue.length})</h3>
               {queue.length === 0 ? (
-                <div className="bg-white/5 rounded-3xl p-6 sm:p-8 text-center text-white/60 border border-white/10">
+                <div className="bg-white/5 rounded-3xl p-6 sm:p-8 text-center text-white/60 border border-white/10 w-full">
                   <div className="text-3xl sm:text-4xl mb-2">🎧</div>
                   <p className="text-sm sm:text-base">Waiting for host to add songs...</p>
                 </div>
               ) : (
-                <div className="space-y-2 sm:space-y-3">
+                <div className="space-y-2 sm:space-y-3 w-full">
                   {queue.map((song, idx) => {
                     const isCurrent = currentSong?.id === song.id
                     return (
                       <div
                         key={song.id}
-                        className={`flex flex-col gap-3 p-3 rounded-2xl border transition-colors ${
+                        className={`flex flex-col gap-3 p-3 rounded-2xl border transition-colors w-full ${
                           isCurrent
                             ? 'bg-gradient-to-r from-purple-700/30 to-indigo-700/20 border-purple-400/40 shadow-lg'
                             : 'bg-slate-900/40 border-white/5'
                         }`}
                       >
-                        <div className="flex items-start gap-2 sm:gap-3 min-w-0">
+                        <div className="flex items-start gap-2 sm:gap-3 min-w-0 w-full">
                           <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-white/70 flex-shrink-0">
                             <span className="text-base sm:text-lg font-bold w-6 sm:w-8 text-center">
                               {isCurrent ? '▶️' : idx + 1}
