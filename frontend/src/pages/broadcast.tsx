@@ -141,7 +141,13 @@ export default function BroadcastPage() {
     socket.on('playlist:update', (data) => {
       setQueue(data.queue || [])
       setCurrentSong(data.currentSong || null)
-      console.log('🎵 Queue updated:', data.queue?.length || 0)
+    console.log('🎵 Queue updated:', data.queue?.length || 0, {
+      playingFlag: data.playing,
+      currentSongId: data.currentSong?.id,
+      consent: audioConsent,
+      playerReady,
+      hasPlayer: !!playerRef.current,
+    })
 
       if (typeof data.playing === 'boolean') {
         if (data.playing && data.currentSong) {
@@ -156,6 +162,13 @@ export default function BroadcastPage() {
               return
             }
             playbackRequestRef.current = { videoId, startSeconds, startedAt }
+            console.log('🎬 Received playback request', {
+              videoId,
+              startSeconds,
+              audioConsent,
+              playerReady,
+              hasPlayer: !!playerRef.current,
+            })
             flushPendingPlayback()
           } else {
             console.error('Unable to determine video ID for', data.currentSong)
