@@ -424,16 +424,16 @@ export default function RoomPage() {
           <div className="max-w-md mx-auto bg-slate-900/90 border border-white/10 text-white rounded-3xl shadow-2xl p-4 flex flex-col gap-3 pointer-events-auto backdrop-blur">
             <div className="text-sm md:text-base font-semibold flex items-center gap-2 justify-center text-white/80">
               <span role="img" aria-label="speaker">🔊</span>
-              Tap once to enable audio playback
+              Enable Audio for This Session
             </div>
             <button
-              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-2 rounded-2xl text-base shadow-lg"
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-3 rounded-2xl text-base shadow-lg hover:shadow-xl transition-all"
               onClick={enableAudio}
             >
               Enable Audio
             </button>
             <p className="text-xs md:text-sm text-white/60 text-center">
-              Mobile browsers block autoplay until you interact. Tap once to unlock playback for this session.
+              Tap to enable playback. On some mobile browsers, you may also need to unmute the volume in your device settings or YouTube player controls.
             </p>
           </div>
         </div>
