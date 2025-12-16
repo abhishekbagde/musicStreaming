@@ -196,15 +196,6 @@ This minor update focuses on UX improvements, system notifications, and frontend
 
 ---
 
-## 📚 Related Documentation
-
-- [New Features v1.1 Detailed Guide](./NEW_FEATURES_v1.1.md)
-- [Co-Host Feature Documentation](./COHOST_FEATURE_GUIDE.md)
-- [Browser Compatibility Details](./BROWSER_COMPATIBILITY_FIX.md)
-- [Guest Search Bug Fix](./GUEST_SEARCH_BUG_FIX.md)
-
----
-
 ## 🚀 Deployment Status
 
 - ✅ Frontend: Deployed and live

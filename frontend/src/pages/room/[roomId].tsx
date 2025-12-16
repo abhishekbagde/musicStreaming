@@ -405,6 +405,20 @@ export default function RoomPage() {
       })
     })
 
+    // System message received (action logs)
+    socket.on('system:message', (data: any) => {
+      const systemMsg: ChatMessage = {
+        messageId: `system-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        userId: 'system',
+        username: 'System',
+        message: data.message,
+        timestamp: data.timestamp || new Date().toISOString(),
+        isHost: false,
+        isSystemMessage: true,
+      }
+      setMessages((prev) => [...prev, systemMsg])
+    })
+
     socket.on('chat:reaction', (data) => {
       if (!data?.messageId || !data?.emoji || !data?.userId) return
       applyReactionUpdate(
@@ -455,6 +469,7 @@ export default function RoomPage() {
       socket.off('broadcast:stopped')
       socket.off('playlist:update')
       socket.off('chat:message')
+      socket.off('system:message')
       socket.off('chat:reaction')
       socket.off('song:requests:update')
       socket.off('room:closed')
@@ -599,50 +614,29 @@ export default function RoomPage() {
     }
   }
 
-  // Helper to add system message (for logging actions)
-  const addSystemMessage = useCallback((message: string) => {
-    const systemMsg: ChatMessage = {
-      messageId: `system-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      userId: 'system',
-      username: 'System',
-      message,
-      timestamp: new Date().toISOString(),
-      isHost: false,
-      isSystemMessage: true,
-    }
-    setMessages((prev) => [...prev, systemMsg])
-  }, [])
-
   const handleAddSong = (song: Song) => {
     if (!currentRoomId || !canManageSongs) return
     socket.emit('song:add', { roomId: currentRoomId, song })
-    addSystemMessage(`➕ Added "${song.title}" to queue`)
   }
 
   const handleRemoveSong = (songId: string) => {
     if (!currentRoomId || !canManageSongs) return
-    const songTitle = queue.find((s) => s.id === songId)?.title || 'Unknown song'
     socket.emit('song:remove', { roomId: currentRoomId, songId })
-    addSystemMessage(`➖ Removed "${songTitle}" from queue`)
   }
 
   const handleSkip = () => {
     if (!currentRoomId || !canManageSongs) return
     socket.emit('song:skip', { roomId: currentRoomId })
-    addSystemMessage(`⏭️ Skipped to next song`)
   }
 
   const handlePrevious = () => {
     if (!currentRoomId || !canManageSongs) return
     socket.emit('song:previous', { roomId: currentRoomId })
-    addSystemMessage(`⏮️ Went to previous song`)
   }
 
   const handlePlaySpecific = (songId: string) => {
     if (!currentRoomId || !canManageSongs) return
-    const songTitle = queue.find((s) => s.id === songId)?.title || 'Unknown song'
     socket.emit('song:playSpecific', { roomId: currentRoomId, songId })
-    addSystemMessage(`▶️ Now playing "${songTitle}"`)
   }
 
   const reorderLocalQueue = useCallback((fromIndex: number, toIndex: number) => {
@@ -724,10 +718,9 @@ export default function RoomPage() {
     (song: Song) => {
       if (!currentRoomId) return
       socket.emit('song:request', { roomId: currentRoomId, song })
-      addSystemMessage(`📮 You requested "${song.title}"`)
       console.log('📮 Requested song:', song.title)
     },
-    [currentRoomId, addSystemMessage]
+    [currentRoomId]
   )
 
   const handleTogglePlayback = () => {
@@ -802,16 +795,6 @@ export default function RoomPage() {
         aria-hidden="true"
       />
 
-      {/* Back Button */}
-      <div className="fixed top-4 left-4 z-50">
-        <Link
-          href="/browse"
-          className="inline-flex items-center gap-2 text-white/70 hover:text-white transition text-sm sm:text-base font-semibold"
-        >
-          ← Back to Browse
-        </Link>
-      </div>
-
       {/* Connection Status Indicator */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold backdrop-blur">
         {connectionStatus === 'connected' && (
@@ -853,17 +836,6 @@ export default function RoomPage() {
         </div>
       )}
 
-      {/* Header with Leave Button */}
-      <div className="flex justify-between items-center mb-4 sm:mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-white">🎶 Music Room</h1>
-        <button
-          onClick={handleLeaveRoom}
-          className="bg-red-600/80 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-semibold text-sm transition"
-        >
-          👋 Leave Room
-        </button>
-      </div>
-      
       <div className="w-full mx-auto grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 px-0 max-w-6xl">
         {/* Main Player Area */}
         <div className="lg:col-span-2 space-y-3 sm:space-y-4 lg:space-y-6 w-full">

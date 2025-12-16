@@ -104,6 +104,12 @@ export function roomHandler(io, socket, roomManager) {
         participantCount: room.participants.length,
       })
 
+      // Emit system message to all users in room
+      io.to(roomId).emit('system:message', {
+        message: `👤 ${username || `Guest_${Math.random().toString(36).substr(2, 5)}`} joined the room`,
+        timestamp: new Date().toISOString(),
+      })
+
       // Send current playlist state to the new user
       socket.emit('playlist:update', {
         queue: roomManager.getQueue(roomId),
@@ -128,6 +134,7 @@ export function roomHandler(io, socket, roomManager) {
       if (!session) return
 
       const { roomId } = session
+      const username = session.username || 'Unknown'
       const result = roomManager.leaveRoom(socket.id)
 
       socket.leave(roomId)
@@ -142,6 +149,12 @@ export function roomHandler(io, socket, roomManager) {
           io.to(roomId).emit('user:left', {
             userId: socket.id,
             participantCount: room.participants.length,
+          })
+
+          // Emit system message
+          io.to(roomId).emit('system:message', {
+            message: `👋 ${username} left the room`,
+            timestamp: new Date().toISOString(),
           })
         }
       }
@@ -271,10 +284,20 @@ export function roomHandler(io, socket, roomManager) {
         return
       }
 
+      // Get promoted user's name
+      const promotedUserSession = roomManager.getUserSession(userId)
+      const promotedUsername = promotedUserSession?.username || 'Unknown'
+
       // Broadcast promotion event to all users in the room
       io.to(roomId).emit('user:promoted-cohost', {
         userId,
         promotedBy: hostId,
+      })
+
+      // Emit system message
+      io.to(roomId).emit('system:message', {
+        message: `⭐ ${promotedUsername} was promoted to co-host`,
+        timestamp: new Date().toISOString(),
       })
 
       console.log(`⭐ User ${userId} promoted to co-host in room ${roomId}`)
@@ -308,10 +331,20 @@ export function roomHandler(io, socket, roomManager) {
         return
       }
 
+      // Get demoted user's name
+      const demotedUserSession = roomManager.getUserSession(userId)
+      const demotedUsername = demotedUserSession?.username || 'Unknown'
+
       // Broadcast demotion event to all users in the room
       io.to(roomId).emit('user:demoted-cohost', {
         userId,
         demotedBy: hostId,
+      })
+
+      // Emit system message
+      io.to(roomId).emit('system:message', {
+        message: `👤 ${demotedUsername} was demoted from co-host`,
+        timestamp: new Date().toISOString(),
       })
 
       console.log(`👤 User ${userId} demoted from co-host in room ${roomId}`)

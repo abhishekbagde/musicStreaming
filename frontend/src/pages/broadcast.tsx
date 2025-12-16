@@ -393,6 +393,20 @@ export default function BroadcastPage() {
       scrollToBottom()
     })
 
+    // System message received (action logs)
+    socket.on('system:message', (data: any) => {
+      const systemMsg: ChatMessage = {
+        messageId: `system-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        userId: 'system',
+        username: 'System',
+        message: data.message,
+        timestamp: data.timestamp || new Date().toISOString(),
+        isHost: false,
+      }
+      setMessages((prev) => [...prev, systemMsg])
+      scrollToBottom()
+    })
+
     socket.on('chat:reaction', (data) => {
       if (!data?.messageId || !data?.emoji || !data?.userId) return
       applyReactionUpdate(
@@ -440,6 +454,7 @@ export default function BroadcastPage() {
       socket.off('user:left')
       socket.off('playlist:update')
       socket.off('chat:message')
+      socket.off('system:message')
       socket.off('chat:reaction')
       socket.off('song:requests:update')
       socket.off('error')
@@ -898,16 +913,6 @@ export default function BroadcastPage() {
         aria-hidden="true"
       />
 
-      {/* Back Button */}
-      <div className="fixed top-4 left-4 z-50">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-white/70 hover:text-white transition text-sm sm:text-base font-semibold"
-        >
-          ← Back to Home
-        </Link>
-      </div>
-
       {/* Connection Status Indicator */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold backdrop-blur">
         {connectionStatus === 'connected' && (
@@ -1257,24 +1262,39 @@ export default function BroadcastPage() {
                 </p>
               ) : (
                 messages.map((msg) => (
-                  <div key={msg.messageId} className="text-xs sm:text-sm bg-white/5 rounded-2xl p-3 border border-white/5">
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="font-semibold text-purple-300 text-xs sm:text-sm">
-                        {msg.isHost ? '🎤' : ''} {msg.username}
-                      </span>
-                      <span className="text-xs text-white/50">
-                        {new Date(msg.timestamp).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <p className="text-white/80 ml-4 break-words text-xs sm:text-sm">
-                      {msg.message}
-                    </p>
-                    <MessageReactions
-                      messageId={msg.messageId}
-                      reactions={messageReactions[msg.messageId] || {}}
-                      currentUserId={currentUserId}
-                      onReact={handleReactToMessage}
-                    />
+                  <div
+                    key={msg.messageId}
+                    className={`rounded-2xl p-3 border ${
+                      msg.userId === 'system'
+                        ? 'bg-transparent border-transparent p-1 py-1'
+                        : 'text-xs sm:text-sm bg-white/5 border-white/5'
+                    }`}
+                  >
+                    {msg.userId === 'system' ? (
+                      <div className="text-xs text-white/50 italic">
+                        {msg.message}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span className="font-semibold text-purple-300 text-xs sm:text-sm">
+                            {msg.isHost ? '🎤' : ''} {msg.username}
+                          </span>
+                          <span className="text-xs text-white/50">
+                            {new Date(msg.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <p className="text-white/80 ml-4 break-words text-xs sm:text-sm">
+                          {msg.message}
+                        </p>
+                        <MessageReactions
+                          messageId={msg.messageId}
+                          reactions={messageReactions[msg.messageId] || {}}
+                          currentUserId={currentUserId}
+                          onReact={handleReactToMessage}
+                        />
+                      </>
+                    )}
                   </div>
                 ))
               )}

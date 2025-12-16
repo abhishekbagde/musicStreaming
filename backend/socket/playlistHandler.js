@@ -14,6 +14,10 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
+    // Get username of who added the song
+    const session = roomManager.getUserSession(socket.id)
+    const username = session?.username || room.hostName || 'Unknown'
+
     // Add song to queue
     roomManager.addSongToQueue(roomId, song)
     const queue = roomManager.getQueue(roomId)
@@ -25,6 +29,12 @@ export const playlistHandler = (io, socket, roomManager) => {
       currentSong: roomManager.getCurrentSong(roomId),
       playing: playbackState.playing,
       playingFrom: playbackState.playingFrom,
+    })
+
+    // Emit system message with username
+    io.to(roomId).emit('system:message', {
+      message: `➕ ${username} added "${song.title}" to queue`,
+      timestamp: new Date().toISOString(),
     })
   })
 
@@ -43,16 +53,31 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
-    roomManager.removeSongFromQueue(roomId, songId)
+    // Get the song title before removing it
     const queue = roomManager.getQueue(roomId)
+    const songToRemove = queue.find((s) => s.id === songId)
+    const songTitle = songToRemove?.title || 'Unknown song'
+
+    // Get username of who removed the song
+    const session = roomManager.getUserSession(socket.id)
+    const username = session?.username || room.hostName || 'Unknown'
+
+    roomManager.removeSongFromQueue(roomId, songId)
+    const updatedQueue = roomManager.getQueue(roomId)
 
     // Broadcast updated queue to all users in room
     const playbackState = roomManager.getPlaybackState(roomId)
     io.to(roomId).emit('playlist:update', {
-      queue,
+      queue: updatedQueue,
       currentSong: roomManager.getCurrentSong(roomId),
       playing: playbackState.playing,
       playingFrom: playbackState.playingFrom,
+    })
+
+    // Emit system message with username
+    io.to(roomId).emit('system:message', {
+      message: `➖ ${username} removed "${songTitle}" from queue`,
+      timestamp: new Date().toISOString(),
     })
   })
 
@@ -96,6 +121,12 @@ export const playlistHandler = (io, socket, roomManager) => {
       playing: true,
       playingFrom: startedAt,
     })
+
+    // Emit system message
+    io.to(roomId).emit('system:message', {
+      message: `▶️ Now playing "${currentSong.title}"`,
+      timestamp: new Date().toISOString(),
+    })
   })
 
   // Handle skipping to the next song
@@ -119,6 +150,10 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
+    // Get username of who skipped
+    const session = roomManager.getUserSession(socket.id)
+    const username = session?.username || room.hostName || 'Unknown'
+
     const result = roomManager.playNextSong(roomId)
     if (!result.success) {
       socket.emit('error', { message: result.error || 'Unable to skip song' })
@@ -134,6 +169,11 @@ export const playlistHandler = (io, socket, roomManager) => {
         playing: false,
         playingFrom: null,
       })
+      // Emit system message
+      io.to(roomId).emit('system:message', {
+        message: `⏭️ ${username} skipped the song`,
+        timestamp: new Date().toISOString(),
+      })
       return
     }
 
@@ -145,6 +185,12 @@ export const playlistHandler = (io, socket, roomManager) => {
       currentSong: result.song,
       playing: true,
       playingFrom,
+    })
+
+    // Emit system message with new song
+    io.to(roomId).emit('system:message', {
+      message: `⏭️ ${username} skipped to "${result.song.title}"`,
+      timestamp: new Date().toISOString(),
     })
   })
 
@@ -282,6 +328,10 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
+    // Get username
+    const session = roomManager.getUserSession(socket.id)
+    const username = session?.username || room.hostName || 'Unknown'
+
     const result = roomManager.playPreviousSong(roomId)
     if (!result.success || !result.song) {
       socket.emit('error', { message: result.error || 'Unable to play previous song' })
@@ -296,6 +346,12 @@ export const playlistHandler = (io, socket, roomManager) => {
       currentSong: result.song,
       playing: true,
       playingFrom,
+    })
+
+    // Emit system message
+    io.to(roomId).emit('system:message', {
+      message: `⏮️ ${username} played previous song "${result.song.title}"`,
+      timestamp: new Date().toISOString(),
     })
   })
 
@@ -319,6 +375,10 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
+    // Get username
+    const session = roomManager.getUserSession(socket.id)
+    const username = session?.username || room.hostName || 'Unknown'
+
     const result = roomManager.playSongById(roomId, songId)
     if (!result.success || !result.song) {
       socket.emit('error', { message: result.error || 'Unable to play that song' })
@@ -333,6 +393,12 @@ export const playlistHandler = (io, socket, roomManager) => {
       currentSong: result.song,
       playing: true,
       playingFrom,
+    })
+
+    // Emit system message
+    io.to(roomId).emit('system:message', {
+      message: `▶️ ${username} played "${result.song.title}"`,
+      timestamp: new Date().toISOString(),
     })
   })
 
@@ -386,6 +452,12 @@ export const playlistHandler = (io, socket, roomManager) => {
     }
     io.to(roomId).emit('song:requests:update', {
       requests: roomManager.getSongRequests(roomId),
+    })
+
+    // Emit system message with username
+    io.to(roomId).emit('system:message', {
+      message: `📮 ${session.username} requested "${song.title}"`,
+      timestamp: new Date().toISOString(),
     })
   })
 
