@@ -50,6 +50,7 @@ app.get('/api/rooms', (req, res) => {
     roomId: room.roomId,
     roomName: room.roomName,
     hostId: room.hostId,
+    hostName: room.hostName,
     guestCount: room.participants.length - 1, // Exclude host
     isLive: room.isLive,
     createdAt: room.createdAt,
@@ -69,6 +70,7 @@ app.get('/api/rooms/:roomId', (req, res) => {
     roomId: room.roomId,
     roomName: room.roomName,
     hostId: room.hostId,
+    hostName: room.hostName,
     participants: room.participants,
     isLive: room.isLive,
     createdAt: room.createdAt,

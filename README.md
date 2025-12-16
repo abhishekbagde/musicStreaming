@@ -1,98 +1,60 @@
-# Music Streaming Site
+# Music Streaming
 
-A real-time music streaming platform where any user can broadcast audio from their computer to multiple guests in real-time with chat functionality.
+A real-time, browser-based listening party platform where a host can broadcast a shared YouTube-powered playlist to any number of guests. The app keeps everybody in sync, supports live chat, and now lets hosts promote trusted listeners to **co-hosts** who can help run the queue.
 
-## Features
+## Highlights
 
-- 🎵 **Audio Capture** - Broadcast audio from any source (Spotify, Apple Music, YouTube, local player)
-- 📡 **Real-time Streaming** - Multiple guests listen in sync with 5-6 second latency
-- 💬 **Live Chat** - Real-time messaging between host and guests
-- 👥 **Guest Management** - No login required, share room ID to invite
-- 🎚️ **Adaptive Quality** - Auto-adjusts bitrate based on network conditions
-- 📊 **Room Management** - Create, join, and manage broadcast rooms
+- 🎧 **Shared playback queue** – Search YouTube, queue tracks, and keep everyone synced with automatic next/previous handling.
+- 🧑‍🤝‍🧑 **Role-aware controls** – Hosts can promote or demote co-hosts, and co-hosts get the same queue/playback powers without owning the room.
+- 💬 **Live chat** – Lightweight room chat keeps hosts and guests connected.
+- 📊 **Room controls & telemetry** – Hosts see participant counts plus playback state, with safety checks so only authorized users can change the playlist.
+- 🌐 **Zero-install listening** – Guests just open a link, pick a nickname, and the player buffers enough audio (~5–6 seconds) for stable playback.
 
-## Project Structure
+## Repository Layout
 
 ```
 musicStreaming/
-├── frontend/          # Next.js frontend application
-│   ├── src/
-│   │   ├── components/    # React components
-│   │   ├── pages/         # Next.js pages
-│   │   ├── hooks/         # Custom React hooks
-│   │   ├── types/         # TypeScript types
-│   │   └── utils/         # Utility functions
-│   ├── public/            # Static assets
-│   └── package.json
-├── backend/           # Node.js/Express backend
-│   ├── socket/            # Socket.io handlers
-│   ├── routes/            # API routes
-│   ├── utils/             # Utility functions
-│   ├── server.js          # Express server
-│   └── package.json
-└── SYSTEM_DESIGN.md   # Architecture documentation
+├── backend/                 # Express + Socket.io server
+│   ├── socket/              # Socket event handlers (rooms, playlist, chat, co-hosting)
+│   ├── routes/              # REST endpoints (e.g. YouTube search proxy)
+│   ├── utils/               # Room manager, playback state, helpers
+│   └── server.js            # Entry point
+├── frontend/                # Next.js 14 application
+│   ├── src/pages/           # Broadcast, browse, and guest room pages
+│   ├── src/utils/           # Socket client, API client, YouTube loader
+│   └── tailwind.config.ts   # Styling
+├── node_modules/            # Root dependencies (YouTube helpers)
+├── package.json             # Root-level shared deps
+├── README.md                # You are here
+└── SYSTEM_DESIGN.md         # Architecture deep dive
 ```
 
-## Tech Stack
-
-- **Frontend**: Next.js 14, React 18, TypeScript, Tailwind CSS
-- **Backend**: Node.js, Express.js, Socket.io
-- **Real-time**: WebSocket via Socket.io
-- **State Management**: Zustand
-- **Deployment**: Vercel (frontend), Render/Railway (backend)
-
-## Live Demo
-
-🚀 **Frontend**: https://music-streaming-dun.vercel.app/  
-🎵 **Backend**: https://musicstreaming-backend.onrender.com/
-
-**Try it now:**
-- **Host**: Go to [Broadcast](https://music-streaming-dun.vercel.app/broadcast), create a room, and start broadcasting
-- **Guest**: Go to [Browse](https://music-streaming-dun.vercel.app/browse), find the room, and join to listen
-
-## Quick Start
+## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+ installed
-- npm or yarn package manager
+- Node.js **18+**
+- npm (ships with Node) or yarn/pnpm if you prefer
+- Two terminals/browsers to simulate host + guest while testing locally
 
-### Local Development
-
-**Backend Setup**
-
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-Backend runs on `http://localhost:3001`
-
-**Frontend Setup** (in another terminal)
+### 1. Install Dependencies
 
 ```bash
-cd frontend
-npm install
-npm run dev
+git clone https://github.com/abhishekbagde/musicStreaming.git
+cd musicStreaming
+
+# Backend deps
+cd backend && npm install && cd ..
+
+# Frontend deps
+cd frontend && npm install && cd ..
 ```
 
-Frontend runs on `http://localhost:3000`
+### 2. Configure Environment Variables
 
-### Production Deployment
+Create the following files if they do not exist.
 
-**Frontend** (Vercel)
-- Connected to GitHub: auto-deploys on push to main
-- URL: https://musicstreaming-frontend.vercel.app/
-
-**Backend** (Render)
-- Connected to GitHub: auto-deploys on push to main
-- URL: https://musicstreaming-backend.onrender.com/
-- Connects to frontend via `NEXT_PUBLIC_SOCKET_URL` environment variable
-
-## Environment Variables
-
-### Frontend (.env.local)
+**`frontend/.env.local`**
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:3001
@@ -104,7 +66,7 @@ NEXT_PUBLIC_BUFFER_SIZE_SECONDS=10
 NEXT_PUBLIC_MIN_BUFFER_TO_PLAY=5
 ```
 
-### Backend (.env)
+**`backend/.env`**
 
 ```env
 PORT=3001
@@ -116,207 +78,86 @@ AUDIO_CHANNELS=2
 MAX_USERS_PER_ROOM=100
 ```
 
-## How to Use
+These defaults wire the frontend (Next.js) to the backend (Express/Socket.io) on localhost.
 
-### For Hosts (Broadcasting)
+### 3. Run Locally
 
-1. Go to https://music-streaming-dun.vercel.app/broadcast
-2. Enter your name and click "Create Room"
-3. Click "Copy Room ID" to share with guests
-4. Click "Start Broadcast" and grant microphone/audio permission
-5. System audio will start streaming to all joined guests
-6. Chat with guests in real-time
+```bash
+# Terminal 1 – backend
+cd backend
+npm run dev   # http://localhost:3001
 
-### For Guests (Listening)
-
-1. Go to https://music-streaming-dun.vercel.app/browse
-2. Enter your name
-3. Select a room from the list and click "Join"
-4. Audio automatically starts playing when host broadcasts
-5. Chat with the host and other guests
-6. Leave when done
-
-### Testing Locally
-
-1. Terminal 1: Start backend (`cd backend && npm run dev`)
-2. Terminal 2: Start frontend (`cd frontend && npm run dev`)
-3. Open http://localhost:3000/broadcast in browser 1
-4. Open http://localhost:3000/browse in browser 2
-5. Create room and test streaming + chat
-
-## How It Works
-
-## Architecture
-
-### Audio Flow
-
-```
-Host Audio Source → Web Audio API Capture
-         ↓
-    Encode & Send to Server via WebSocket
-         ↓
-    Server Relays to All Guests
-         ↓
-Guest Receives → Circular Buffer → Playback
+# Terminal 2 – frontend
+cd frontend
+npm run dev   # http://localhost:3000
 ```
 
-### Latency
+Open two tabs:
+1. `http://localhost:3000/broadcast` (host dashboard)
+2. `http://localhost:3000/browse` or a direct room URL (guest/co-host view)
 
-- Host capture: 10-50ms
-- Network delay: 20-500ms
-- Intentional buffer: 5000ms (for stability)
-- **Total: ~5-6 seconds** (like live TV broadcast)
+## Using the App
 
-## Deployment
+### Host Workflow
 
-### Prerequisites for Deployment
+1. **Create a room** on `/broadcast`.
+2. **Search YouTube** from the built-in search box and add tracks to the queue.
+3. **Manage playback** – play, pause, skip, go previous, or play a specific song.
+4. **Promote co-hosts** – from the participant list, click ⭐ to give a guest queue permissions.
+5. **Demote when needed** – one click removes co-host rights without kicking the user.
 
-1. GitHub account with repository access
-2. Vercel account (for frontend)
-3. Render account (for backend)
+### Co-Host Workflow
 
-### Frontend Deployment (Vercel)
+1. Join the room from `/browse` or a shared room URL.
+2. After the host promotes you, the guest player unlocks:
+   - YouTube search & add to queue
+   - Play/pause/skip/previous controls
+   - Remove songs or jump to a specific track
+3. Co-host permissions persist until the host demotes you or you leave the room.
 
-1. Push code to GitHub main branch
-2. Go to https://vercel.com/dashboard
-3. Import repository `abhishekbagde/musicStreaming`
-4. Set **Root Directory** to `frontend`
-5. Add environment variable:
-   - `NEXT_PUBLIC_SOCKET_URL` = `https://musicstreaming-backend.onrender.com`
-6. Deploy (auto-deploys on push)
+### Guest Workflow
 
-### Backend Deployment (Render)
+1. Join via `/browse`, pick a nickname, and select a live room.
+2. Audio auto-starts once the host plays a track (buffered ~5 seconds for stability).
+3. Use chat to talk with the host or request songs.
 
-1. Push code to GitHub main branch
-2. Go to https://render.com/dashboard
-3. Create new **Web Service**
-4. Connect `abhishekbagde/musicStreaming` repository
-5. Configure:
-   - **Name**: musicstreaming-backend
-   - **Environment**: Node
-   - **Build Command**: `cd backend && npm install`
-   - **Start Command**: `cd backend && npm start`
-6. Add environment variables:
-   - `NODE_ENV` = `production`
-   - `CORS_ORIGIN` = `https://musicstreaming-frontend.vercel.app`
-7. Deploy
+## Live Deployments
 
-### CI/CD
+- **Frontend** – https://music-streaming-dun.vercel.app/
+- **Backend** – https://musicstreaming-backend.onrender.com/
 
-Both services auto-deploy when you push to the main branch on GitHub.
+> Tip: The production frontend already points at the hosted backend via `NEXT_PUBLIC_SOCKET_URL`.
 
-## API Endpoints
+## Architecture Overview
 
-### REST APIs
+- **Transport**: Socket.io keeps rooms synchronized (playlist updates, chat, co-host events).
+- **Room state**: `backend/utils/roomManager.js` stores queues, playback indexes, host/co-host ids, and permission checks (`canManageSongs`).
+- **Playback**: Hosts initiate playback; guests receive `playlist:update` events with `playingFrom` timestamps so everyone aligns to the same offset.
+- **YouTube search**: Frontend uses `apiClient.search` which proxies to the backend’s YouTube search route to avoid CORS and API key exposure.
+- **Roles & permissions**: Every socket event that mutates the queue calls `roomManager.canManageSongs(roomId, socketId)` ensuring only hosts/co-hosts succeed.
 
-- `GET /health` - Server health check
-- `GET /api/rooms` - List active rooms
-- `GET /api/rooms/:roomId` - Get room details
-- `GET /api/rooms/:roomId/stats` - Get broadcast statistics
+## Deployment Notes
 
-### WebSocket Events
+### Frontend (Vercel)
 
-**Room Management:**
-- `room:create` - Create new broadcast room
-- `room:join` - Join existing room
-- `room:leave` - Leave room
+1. Set the project root to `frontend`.
+2. Provide the production `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_SOCKET_URL`.
+3. Push to `main`; Vercel auto-builds and deploys.
 
-**Audio Broadcasting:**
-- `broadcast:start` - Start broadcasting
-- `broadcast:audio` - Send audio chunks
-- `broadcast:stop` - Stop broadcasting
-- `broadcast:stats` - Broadcast statistics
+### Backend (Render/Railway/Server)
 
-**Chat:**
-- `chat:message` - Send chat message
-- `chat:history` - Get message history
-
-## Performance
-
-- Single server: ~100 concurrent users
-- Bandwidth per user: 128 kbps (adaptive)
-- Total for 50 guests: ~6.5 Mbps server egress
-
-## Security
-
-- Microphone permission required
-- Room ID privacy (share with intended users only)
-- Input sanitization for chat
-- Rate limiting on messages
-- HTTPS/WSS in production
+1. Create a Node service pointing to this repo.
+2. Build command: `cd backend && npm install`
+3. Start command: `cd backend && npm start`
+4. Mirror the `.env` variables with production values and ensure CORS origins match the deployed frontend.
 
 ## Troubleshooting
 
-### "Failed to fetch rooms" error
+- **Guests stuck as listeners** – Confirm the host promoted them (⭐). Co-hosts now see full controls in the guest UI.
+- **Playlist actions rejected** – Backend logs “Only host and co-hosts can …”. Make sure the emitting socket id matches a host/co-host in `roomManager`.
+- **Audio not starting on mobile** – Mobile browsers require a tap; both broadcast and room pages include an “Enable Audio” banner to unlock playback.
+- **Latency seems high** – Check `NEXT_PUBLIC_BUFFER_SIZE_SECONDS`. Lowering reduces delay at the cost of resilience.
 
-**Cause**: Frontend can't connect to backend
+---
 
-**Solutions**:
-1. Check `NEXT_PUBLIC_SOCKET_URL` environment variable in Vercel is set to backend URL
-2. Verify backend `CORS_ORIGIN` matches frontend URL in Render environment variables
-3. Check browser console (F12) for CORS errors
-4. Ensure backend service is running on Render (check status in Render dashboard)
-
-### Audio not streaming from YouTube/Spotify/Apple Music
-
-**Cause**: Browser security restrictions (CORS/DRM) prevent capturing audio from external services
-
-**Solutions**:
-
-**Option 1: Use System Audio Capture (Recommended)**
-- When you click "Start Broadcast", the browser will ask you to select an audio source
-- Choose "Share audio" or your browser tab and check "Share audio"
-- This works for YouTube, Spotify, Apple Music, etc.
-
-**Option 2: Install Virtual Audio Device** 
-- **Mac**: Install [Soundflower](https://github.com/mattingalls/Soundflower) (free) or [BlackHole](https://github.com/ExistentialAudio/BlackHole) (recommended)
-- **Windows**: Install [VB-Audio Virtual Cable](https://vb-audio.com/Cable/) (free)
-- Set your system audio to output to the virtual device
-- Browser will capture the virtual device
-- Route audio back to speakers via system settings
-- This allows seamless streaming from any audio source
-
-**Option 3: Upload Local Music Files**
-- Upload MP3/WAV files directly from your computer
-- Great for pre-recorded music or playlists
-
-**Note**: Direct capturing from Spotify Web, Apple Music, and YouTube is blocked by these services for copyright protection
-
-### Audio not streaming to guests
-
-**Cause**: Socket.io connection issues
-
-**Solutions**:
-1. Check browser console for connection errors
-2. Verify Socket.io server is running (check Render logs)
-3. Test with local development setup first
-4. Check firewall/network restrictions
-
-### Rooms not showing up in browse page
-
-**Cause**: Backend not responding to API requests
-
-**Solutions**:
-1. Test backend directly: `curl https://musicstreaming-backend.onrender.com/api/rooms`
-2. Check Render backend logs for errors
-3. Verify `CORS_ORIGIN` environment variable includes frontend URL
-4. Clear browser cache and hard refresh (Ctrl+Shift+R or Cmd+Shift+R)
-
-## Future Enhancements
-
-- [ ] Password-protected rooms
-- [ ] Screen sharing
-- [ ] Queue/request system
-- [ ] User-to-user messaging
-- [ ] Noise suppression
-- [ ] Persistent chat history
-- [ ] Mobile app
-- [ ] Analytics dashboard
-
-## Contributing
-
-Feel free to submit issues and enhancement requests!
-
-## License
-
-Apache License 2.0
+Maintained by [@abhishekbagde](https://github.com/abhishekbagde) and contributors. PRs and issues welcome! 🎶

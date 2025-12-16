@@ -4,12 +4,21 @@ class RoomManager {
     this.userSessions = {}
   }
 
-  createRoom(roomName, hostId) {
+  createRoom(roomName, hostId, hostName = 'Host') {
+    const safeHostName =
+      typeof hostName === 'string' && hostName.trim().length > 0
+        ? hostName.trim().substring(0, 50)
+        : 'Host'
+    const safeRoomName =
+      typeof roomName === 'string' && roomName.trim().length > 0
+        ? roomName.trim()
+        : 'My Listening Party'
     const roomId = `room-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     const room = {
       roomId,
-      roomName,
+      roomName: safeRoomName,
       hostId,
+      hostName: safeHostName,
       participants: [hostId],
       cohosts: [], // Array of user IDs who are co-hosts
       isLive: false,
@@ -29,7 +38,7 @@ class RoomManager {
       resumeMs: 0,
     }
     this.rooms[roomId] = room
-    this.userSessions[hostId] = { roomId, isHost: true, username: 'Host' }
+    this.userSessions[hostId] = { roomId, isHost: true, username: safeHostName }
     return room
   }
   // Playlist queue management
@@ -183,6 +192,7 @@ class RoomManager {
         roomId: room.roomId,
         roomName: room.roomName,
         hostId: room.hostId,
+        hostName: room.hostName,
         participants: room.participants,
         isLive: room.isLive,
       },

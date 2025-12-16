@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { socket } from '@/utils/socketClient'
 import { apiClient } from '@/utils/apiClient'
 import { loadYouTubeIframeAPI } from '@/utils/youtubeLoader'
+import { EmojiPickerButton } from '@/components/EmojiPickerButton'
 
 interface Song {
   id: string
@@ -32,6 +33,8 @@ const normalizeParticipant = (participant: Participant): Participant => ({
   role: participant.role || (participant.isHost ? 'host' : 'guest'),
 })
 
+const HOST_NAME_STORAGE_KEY = 'musicstreaming_host_name'
+
 const extractVideoId = (song: Song | null) => {
   if (!song) return null
   if (song.id && /^[a-zA-Z0-9_-]{8,15}$/.test(song.id)) {
@@ -61,6 +64,7 @@ const computeStartSeconds = (startedAt?: number) => {
 export default function BroadcastPage() {
   // --- Room State ---
   const [roomName, setRoomName] = useState('')
+  const [hostName, setHostName] = useState('')
   const [roomId, setRoomId] = useState<string | null>(null)
 
   // --- Participants & Chat ---
@@ -84,6 +88,7 @@ export default function BroadcastPage() {
 
   // --- Refs ---
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messageInputRef = useRef<HTMLInputElement | null>(null)
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const playbackMetaRef = useRef<{ videoId: string | null; startedAt: number | null }>({
     videoId: null,
@@ -145,6 +150,23 @@ export default function BroadcastPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored = window.localStorage.getItem(HOST_NAME_STORAGE_KEY)
+    if (stored) {
+      setHostName(stored)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (hostName) {
+      window.localStorage.setItem(HOST_NAME_STORAGE_KEY, hostName)
+    } else {
+      window.localStorage.removeItem(HOST_NAME_STORAGE_KEY)
+    }
+  }, [hostName])
+
   // --- Socket.io Listeners ---
   useEffect(() => {
     // Connection status monitoring
@@ -185,13 +207,16 @@ export default function BroadcastPage() {
       setRoomId(data.roomId)
       setError('')
       console.log('✅ Room created:', data.roomId)
+      const initialHostName =
+        typeof data.hostName === 'string' && data.hostName.trim().length > 0 ? data.hostName : 'Host'
+      setHostName(initialHostName)
       setParticipants([
-        {
+        normalizeParticipant({
           userId: socket.id || 'host',
-          username: 'You (Host)',
+          username: initialHostName,
           isHost: true,
           role: 'host',
-        },
+        }),
       ])
     })
 
@@ -447,11 +472,21 @@ export default function BroadcastPage() {
   // --- Room Management ---
   const handleCreateRoom = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!roomName.trim()) {
+    const trimmedRoomName = roomName.trim()
+    const trimmedHostName = hostName.trim()
+    if (!trimmedHostName) {
+      setError('Please enter your display name')
+      return
+    }
+    if (!trimmedRoomName) {
       setError('Please enter a room name')
       return
     }
-    socket.emit('room:create', { roomName })
+    setError('')
+    socket.emit('room:create', {
+      roomName: trimmedRoomName.substring(0, 80),
+      hostName: trimmedHostName.substring(0, 40),
+    })
   }
 
 
@@ -572,6 +607,24 @@ export default function BroadcastPage() {
     }
   }
 
+  const handleInsertEmoji = useCallback((emoji: string) => {
+    setMessageInput((prev) => {
+      const input = messageInputRef.current
+      if (input && typeof input.selectionStart === 'number' && typeof input.selectionEnd === 'number') {
+        const start = input.selectionStart
+        const end = input.selectionEnd
+        const nextValue = prev.slice(0, start) + emoji + prev.slice(end)
+        requestAnimationFrame(() => {
+          const cursor = start + emoji.length
+          input.setSelectionRange(cursor, cursor)
+          input.focus()
+        })
+        return nextValue
+      }
+      return `${prev}${emoji}`
+    })
+  }, [])
+
   // --- Chat Handler ---
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault()
@@ -581,6 +634,14 @@ export default function BroadcastPage() {
   }
 
   const nowPlaying = currentSong || (queue.length > 0 ? queue[0] : null)
+  const currentUserId = socket.id || 'host'
+  const hostParticipant = participants.find((p) => p.isHost)
+  const hostDisplayName = hostParticipant?.username || hostName || 'Host'
+  const roleLabelForParticipant = (participant: Participant) => {
+    if (participant.isHost) return 'Host'
+    if (participant.role === 'cohost') return 'Co-Host'
+    return 'Guest'
+  }
 
   if (!roomId) {
     return (
@@ -597,6 +658,21 @@ export default function BroadcastPage() {
           )}
 
           <form onSubmit={handleCreateRoom} className="space-y-4">
+            <div>
+              <label className="block text-xs sm:text-sm uppercase tracking-widest text-white/70 font-semibold mb-2">
+                Your Name
+              </label>
+              <input
+                type="text"
+                value={hostName}
+                onChange={(e) => setHostName(e.target.value)}
+                placeholder="e.g., DJ Aurora"
+                className="w-full px-4 py-3 border border-white/10 rounded-2xl bg-white/5 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-400 text-sm"
+              />
+              <p className="text-[11px] sm:text-xs text-white/50 mt-1">
+                Shown to everyone in the room. We&apos;ll remember it for next time.
+              </p>
+            </div>
             <div>
               <label className="block text-xs sm:text-sm uppercase tracking-widest text-white/70 font-semibold mb-2">
                 Room Name
@@ -934,12 +1010,14 @@ export default function BroadcastPage() {
           </div>
 
           {/* Message Input */}
-          <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-white/10 pt-4">
+          <form onSubmit={handleSendMessage} className="flex gap-2 items-center border-t border-white/10 pt-4">
+            <EmojiPickerButton onEmojiSelect={handleInsertEmoji} />
             <input
               type="text"
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
               placeholder="Type a message..."
+              ref={messageInputRef}
               className="flex-1 px-3 py-2 sm:py-3 border border-white/10 rounded-2xl text-xs sm:text-sm bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
             />
             <button

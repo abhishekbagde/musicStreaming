@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import { socket } from '@/utils/socketClient'
+import { EmojiPickerButton } from '@/components/EmojiPickerButton'
 import { apiClient } from '@/utils/apiClient'
 import { loadYouTubeIframeAPI } from '@/utils/youtubeLoader'
 
@@ -96,6 +97,7 @@ export default function RoomPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const playerRef = useRef<any>(null)
   const playerContainerRef = useRef<HTMLDivElement | null>(null)
+  const messageInputRef = useRef<HTMLInputElement | null>(null)
   const [playerContainerReady, setPlayerContainerReady] = useState(false)
   const registerPlayerContainer = useCallback((node: HTMLDivElement | null) => {
     playerContainerRef.current = node
@@ -552,6 +554,24 @@ export default function RoomPage() {
     }
   }
 
+  const handleInsertEmoji = useCallback((emoji: string) => {
+    setMessageInput((prev) => {
+      const input = messageInputRef.current
+      if (input && typeof input.selectionStart === 'number' && typeof input.selectionEnd === 'number') {
+        const start = input.selectionStart
+        const end = input.selectionEnd
+        const nextValue = prev.slice(0, start) + emoji + prev.slice(end)
+        requestAnimationFrame(() => {
+          const cursor = start + emoji.length
+          input.setSelectionRange(cursor, cursor)
+          input.focus()
+        })
+        return nextValue
+      }
+      return `${prev}${emoji}`
+    })
+  }, [])
+
   // --- Chat Handler ---
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault()
@@ -848,12 +868,14 @@ export default function RoomPage() {
           </div>
 
           {/* Message Input */}
-          <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-white/10 pt-4">
+          <form onSubmit={handleSendMessage} className="flex gap-2 items-center border-t border-white/10 pt-4">
+            <EmojiPickerButton onEmojiSelect={handleInsertEmoji} />
             <input
               type="text"
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
               placeholder="Type a message..."
+              ref={messageInputRef}
               className="flex-1 px-3 py-2 sm:py-3 border border-white/10 rounded-2xl text-xs sm:text-sm bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
             />
             <button

@@ -1,7 +1,7 @@
 export function roomHandler(io, socket, roomManager) {
   socket.on('room:create', (data) => {
     try {
-      const { roomName } = data
+      const { roomName, hostName } = data
       const userId = socket.id
 
       if (!roomName || roomName.trim().length === 0) {
@@ -9,7 +9,15 @@ export function roomHandler(io, socket, roomManager) {
         return
       }
 
-      const room = roomManager.createRoom(roomName, userId)
+      if (!hostName || hostName.trim().length === 0) {
+        socket.emit('error', { message: 'Your display name is required' })
+        return
+      }
+
+      const sanitizedRoomName = roomName.trim().substring(0, 80)
+      const sanitizedHostName = hostName.trim().substring(0, 40)
+
+      const room = roomManager.createRoom(sanitizedRoomName, userId, sanitizedHostName)
       socket.join(room.roomId)
 
       // Emit room created with full participants list including host
@@ -18,6 +26,7 @@ export function roomHandler(io, socket, roomManager) {
         roomId: room.roomId,
         roomName: room.roomName,
         hostId: room.hostId,
+        hostName: room.hostName,
         createdAt: room.createdAt,
       })
 
@@ -27,7 +36,7 @@ export function roomHandler(io, socket, roomManager) {
           const session = roomManager.getUserSession(id)
           return {
             userId: id,
-            username: session?.username || 'Host',
+            username: session?.username || (room_data.hostId === id ? room_data.hostName : 'Host'),
             isHost: room_data.hostId === id,
             role: room_data.hostId === id ? 'host' : room_data.cohosts.includes(id) ? 'cohost' : 'guest',
           }
@@ -41,7 +50,7 @@ export function roomHandler(io, socket, roomManager) {
         ...roomManager.getPlaybackState(room.roomId),
       })
 
-      console.log(`Room created: ${room.roomId} by ${userId}`)
+      console.log(`Room created: ${room.roomId} by ${userId} (${room.hostName})`)
     } catch (error) {
       console.error('Error creating room:', error)
       socket.emit('error', { message: 'Failed to create room' })
