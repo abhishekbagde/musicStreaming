@@ -6,10 +6,10 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>🎵 Music Streaming - Collaborative YouTube Music</title>
+        <title>Music Streaming - Collaborative YouTube Music</title>
         <meta name="description" content="Stream YouTube music with friends in real-time. Collaborate, chat, and enjoy music together instantly." />
         <meta name="keywords" content="music streaming, youtube music, collaborative listening, real-time streaming" />
-        <meta property="og:title" content="🎵 Music Streaming - Collaborative YouTube Music" />
+        <meta property="og:title" content="Music Streaming - Collaborative YouTube Music" />
         <meta property="og:description" content="Stream YouTube music with friends in real-time. Collaborate, chat, and enjoy music together instantly." />
         <meta property="og:type" content="website" />
       </Head>
