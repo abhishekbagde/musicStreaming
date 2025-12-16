@@ -27,6 +27,11 @@ interface Participant {
   role?: 'host' | 'cohost' | 'guest' // 'cohost' = promoted guest
 }
 
+const normalizeParticipant = (participant: Participant): Participant => ({
+  ...participant,
+  role: participant.role || (participant.isHost ? 'host' : 'guest'),
+})
+
 const extractVideoId = (song: Song | null) => {
   if (!song) return null
   if (song.id && /^[a-zA-Z0-9_-]{8,15}$/.test(song.id)) {
@@ -72,6 +77,7 @@ export default function BroadcastPage() {
   // --- UI State ---
   const [error, setError] = useState('')
   const [isHost, setIsHost] = useState(false)
+  const [canManageSongs, setCanManageSongs] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [audioConsent, setAudioConsent] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('connected')
@@ -179,13 +185,21 @@ export default function BroadcastPage() {
       setRoomId(data.roomId)
       setError('')
       console.log('✅ Room created:', data.roomId)
-      setParticipants([{ userId: socket.id || 'host', username: 'You (Host)', isHost: true }])
+      setParticipants([
+        {
+          userId: socket.id || 'host',
+          username: 'You (Host)',
+          isHost: true,
+          role: 'host',
+        },
+      ])
     })
 
     // Participants events
     socket.on('participants:list', (data) => {
-      setParticipants(data.participants || [])
-      console.log('👥 Participants:', data.participants?.length || 0)
+      const normalized = (data.participants || []).map((participant: Participant) => normalizeParticipant(participant))
+      setParticipants(normalized)
+      console.log('👥 Participants:', normalized.length || 0)
     })
 
     socket.on('user:joined', (data) => {
@@ -193,7 +207,15 @@ export default function BroadcastPage() {
         const exists = prev.some((p) => p.userId === data.userId)
         if (!exists) {
           console.log('➕ User joined:', data.username)
-          return [...prev, { userId: data.userId, username: data.username, isHost: data.isHost || false }]
+          return [
+            ...prev,
+            normalizeParticipant({
+              userId: data.userId,
+              username: data.username,
+              isHost: data.isHost || false,
+              role: data.role,
+            }),
+          ]
         }
         return prev
       })
@@ -266,7 +288,7 @@ export default function BroadcastPage() {
 
     // Co-host promotion/demotion events
     socket.on('user:promoted-cohost', (data) => {
-      console.log('⭐ User promoted to co-host:', data.username)
+      console.log('⭐ User promoted to co-host:', data.userId)
       setParticipants((prev) =>
         prev.map((p) =>
           p.userId === data.userId ? { ...p, role: 'cohost' } : p
@@ -275,7 +297,7 @@ export default function BroadcastPage() {
     })
 
     socket.on('user:demoted-cohost', (data) => {
-      console.log('👤 User demoted from co-host:', data.username)
+      console.log('👤 User demoted from co-host:', data.userId)
       setParticipants((prev) =>
         prev.map((p) =>
           p.userId === data.userId ? { ...p, role: 'guest' } : p
@@ -296,10 +318,13 @@ export default function BroadcastPage() {
     }
   }, [flushPendingPlayback])
 
-  // --- Detect if user is host ---
+  // --- Detect if user is host / can manage songs ---
   useEffect(() => {
-    const me = participants.find((p) => p.userId === (socket.id || 'host'))
-    setIsHost(!!me?.isHost)
+    const myId = socket.id || 'host'
+    const me = participants.find((p) => p.userId === myId)
+    const hostFlag = !!me?.isHost
+    setIsHost(hostFlag)
+    setCanManageSongs(!!me && (me.isHost || me.role === 'cohost'))
   }, [participants])
 
   useEffect(() => {
@@ -493,31 +518,31 @@ export default function BroadcastPage() {
   }, [audioConsent, enableAudio])
 
   const handleAddSong = (song: Song) => {
-    if (!roomId) return
+    if (!roomId || !canManageSongs) return
     socket.emit('song:add', { roomId, song })
     console.log('➕ Song added:', song.title)
   }
 
   const handleRemoveSong = (songId: string) => {
-    if (!roomId || !isHost) return
+    if (!roomId || !canManageSongs) return
     socket.emit('song:remove', { roomId, songId })
     console.log('➖ Song removed:', songId)
   }
 
   const handleSkip = () => {
-    if (!roomId || !isHost) return
+    if (!roomId || !canManageSongs) return
     socket.emit('song:skip', { roomId })
     console.log('⏭️ Skipped to next song')
   }
 
   const handlePrevious = () => {
-    if (!roomId || !isHost) return
+    if (!roomId || !canManageSongs) return
     socket.emit('song:previous', { roomId })
     console.log('⏮️ Went to previous song')
   }
 
   const handlePlaySpecific = (songId: string) => {
-    if (!roomId || !isHost) return
+    if (!roomId || !canManageSongs) return
     socket.emit('song:playSpecific', { roomId, songId })
     console.log('🎯 Playing requested song:', songId)
   }
@@ -535,7 +560,7 @@ export default function BroadcastPage() {
   }
 
   const handleTogglePlayback = () => {
-    if (!roomId || !isHost) return
+    if (!roomId || !canManageSongs) return
     if (isPlaying) {
       socket.emit('song:pause', { roomId })
       return
@@ -720,7 +745,7 @@ export default function BroadcastPage() {
                   <div className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2 line-clamp-2">{nowPlaying.title}</div>
                   <div className="text-sm sm:text-base text-white/80 mb-4 line-clamp-1">{nowPlaying.author}</div>
 
-                  {isHost && (
+                  {canManageSongs && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                       <button
                         onClick={handlePrevious}
@@ -781,7 +806,7 @@ export default function BroadcastPage() {
                             <div className="text-xs sm:text-sm text-white/60 line-clamp-1">{song.author}</div>
                           </div>
                         </div>
-                        {isHost && (
+                        {canManageSongs && (
                           <div className="flex items-center gap-2 flex-wrap w-full">
                             <button
                               onClick={() => handlePlaySpecific(song.id)}
