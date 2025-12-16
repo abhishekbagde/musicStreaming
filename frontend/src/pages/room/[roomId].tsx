@@ -70,10 +70,12 @@ export default function RoomPage() {
   // --- Broadcast State ---
   const [isConnected, setIsConnected] = useState(false)
   const [isLive, setIsLive] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('connected')
 
   // --- Player state ---
   const [audioConsent, setAudioConsent] = useState(false)
   const [audioConsentNeeded, setAudioConsentNeeded] = useState(false)
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const pendingPlaybackOnConsentRef = useRef<{ song: Song; startedAt: number } | null>(null)
   const playbackRequestRef = useRef<{ videoId: string; startSeconds: number; startedAt: number } | null>(null)
   const playbackMetaRef = useRef<{ videoId: string | null; startedAt: number | null }>({
@@ -207,6 +209,37 @@ export default function RoomPage() {
   useEffect(() => {
     if (!roomId) return
 
+    // Connection status monitoring
+    socket.on('connect', () => {
+      console.log('✅ [guest] Connected to server')
+      setConnectionStatus('connected')
+    })
+
+    socket.on('disconnect', (reason) => {
+      console.log('❌ [guest] Disconnected:', reason)
+      setConnectionStatus('disconnected')
+    })
+
+    socket.on('reconnect_attempt', () => {
+      console.log('🔄 [guest] Attempting to reconnect...')
+      setConnectionStatus('reconnecting')
+    })
+
+    socket.on('reconnect', () => {
+      console.log('✅ [guest] Reconnected successfully!')
+      setConnectionStatus('connected')
+      // Re-join room after reconnection
+      const username = router.query.username as string
+      if (username) {
+        socket.emit('room:join', { roomId, username })
+      }
+    })
+
+    socket.on('connect_error', (error) => {
+      console.error('🔌 [guest] Connection error:', error)
+      setConnectionStatus('disconnected')
+    })
+
     // Join room
     const username = router.query.username as string
     socket.emit('room:join', { roomId, username })
@@ -327,6 +360,33 @@ export default function RoomPage() {
     }
   }, [audioConsent, enableAudio])
 
+  // --- Heartbeat to keep connection alive while playing ---
+  useEffect(() => {
+    if (!isPlaying || !roomId) {
+      // Clear heartbeat when not playing
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current)
+        heartbeatIntervalRef.current = null
+      }
+      return
+    }
+
+    // Send heartbeat every 25 seconds while song is playing
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (roomId) {
+        socket.emit('heartbeat', { roomId })
+        console.log('💓 [guest] Heartbeat sent to keep connection alive')
+      }
+    }, 25000)
+
+    return () => {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current)
+        heartbeatIntervalRef.current = null
+      }
+    }
+  }, [isPlaying, roomId])
+
   useEffect(() => {
     flushPendingPlayback()
   }, [flushPendingPlayback])
@@ -419,6 +479,28 @@ export default function RoomPage() {
         className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none overflow-hidden"
         aria-hidden="true"
       />
+
+      {/* Connection Status Indicator */}
+      <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold backdrop-blur">
+        {connectionStatus === 'connected' && (
+          <>
+            <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+            <span className="text-green-300">Connected</span>
+          </>
+        )}
+        {connectionStatus === 'reconnecting' && (
+          <>
+            <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full animate-spin"></span>
+            <span className="text-yellow-300">Reconnecting...</span>
+          </>
+        )}
+        {connectionStatus === 'disconnected' && (
+          <>
+            <span className="inline-block w-2 h-2 bg-red-400 rounded-full"></span>
+            <span className="text-red-300">Disconnected</span>
+          </>
+        )}
+      </div>
       {!audioConsent && (
         <div className="fixed inset-x-0 bottom-0 z-20 px-4 pb-6 pt-2 pointer-events-none">
           <div className="max-w-md mx-auto bg-slate-900/90 border border-white/10 text-white rounded-3xl shadow-2xl p-4 flex flex-col gap-3 pointer-events-auto backdrop-blur">
