@@ -24,6 +24,7 @@ interface Participant {
   userId: string
   username: string
   isHost: boolean
+  role?: 'host' | 'cohost' | 'guest' // 'cohost' = promoted guest
 }
 
 const extractVideoId = (song: Song | null) => {
@@ -263,6 +264,25 @@ export default function BroadcastPage() {
       console.error('❌ Error:', data.message)
     })
 
+    // Co-host promotion/demotion events
+    socket.on('user:promoted-cohost', (data) => {
+      console.log('⭐ User promoted to co-host:', data.username)
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.userId === data.userId ? { ...p, role: 'cohost' } : p
+        )
+      )
+    })
+
+    socket.on('user:demoted-cohost', (data) => {
+      console.log('👤 User demoted from co-host:', data.username)
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.userId === data.userId ? { ...p, role: 'guest' } : p
+        )
+      )
+    })
+
     return () => {
       socket.off('room:created')
       socket.off('participants:list')
@@ -271,6 +291,8 @@ export default function BroadcastPage() {
       socket.off('playlist:update')
       socket.off('chat:message')
       socket.off('error')
+      socket.off('user:promoted-cohost')
+      socket.off('user:demoted-cohost')
     }
   }, [flushPendingPlayback])
 
@@ -498,6 +520,18 @@ export default function BroadcastPage() {
     if (!roomId || !isHost) return
     socket.emit('song:playSpecific', { roomId, songId })
     console.log('🎯 Playing requested song:', songId)
+  }
+
+  const handlePromoteCohost = (userId: string) => {
+    if (!roomId || !isHost) return
+    socket.emit('user:promote-cohost', { roomId, userId })
+    console.log('⭐ Promoting user to co-host:', userId)
+  }
+
+  const handleDemoteCohost = (userId: string) => {
+    if (!roomId || !isHost) return
+    socket.emit('user:demote-cohost', { roomId, userId })
+    console.log('👤 Demoting user from co-host:', userId)
   }
 
   const handleTogglePlayback = () => {
@@ -798,13 +832,44 @@ export default function BroadcastPage() {
               {participants.length === 0 ? (
                 <p className="text-white/50 text-center py-4 text-sm">Waiting for guests...</p>
               ) : (
-                <div className="flex flex-wrap gap-2">
+                <div className="space-y-2">
                   {participants.map((p) => (
                     <div
                       key={p.userId}
-                      className="bg-white/10 text-white px-3 sm:px-4 py-2 rounded-full font-semibold text-xs sm:text-sm border border-white/10"
+                      className="bg-white/10 text-white px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm border border-white/10 flex items-center justify-between gap-2"
                     >
-                      {p.isHost ? '🎤' : '👥'} {p.username}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span>
+                          {p.isHost ? '🎤' : p.role === 'cohost' ? '⭐' : '👥'}
+                        </span>
+                        <span className="truncate">{p.username}</span>
+                        {p.role === 'cohost' && (
+                          <span className="text-xs bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded whitespace-nowrap">
+                            Co-Host
+                          </span>
+                        )}
+                      </div>
+                      {isHost && !p.isHost && (
+                        <div className="flex gap-1 flex-shrink-0">
+                          {p.role === 'guest' ? (
+                            <button
+                              onClick={() => handlePromoteCohost(p.userId)}
+                              className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 px-2 py-1 rounded text-xs transition"
+                              title="Promote to Co-Host"
+                            >
+                              ⭐
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleDemoteCohost(p.userId)}
+                              className="bg-slate-500/20 hover:bg-slate-500/30 text-slate-300 px-2 py-1 rounded text-xs transition"
+                              title="Demote to Guest"
+                            >
+                              👥
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
