@@ -11,8 +11,7 @@ export default function Home() {
             🎵 Music Stream
           </h1>
           <p className="text-sm sm:text-base md:text-lg lg:text-xl text-white/70 max-w-2xl mx-auto px-2">
-            Share your audio with friends in real-time. No uploads, no hassle.
-            Just hit play and stream.
+            Stream YouTube music with friends in real-time. Collaborate, chat, and enjoy music together instantly.
           </p>
         </div>
 
@@ -35,27 +34,50 @@ export default function Home() {
         {/* Features */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 max-w-5xl mx-auto mb-8 sm:mb-10 px-2 sm:px-0 w-full">
           <div className="glass p-4 sm:p-6 rounded-3xl">
-            <div className="text-2xl sm:text-3xl mb-3">📡</div>
-            <h3 className="text-white font-semibold mb-2 text-sm sm:text-base">Real-time Streaming</h3>
+            <div className="text-2xl sm:text-3xl mb-3">🎬</div>
+            <h3 className="text-white font-semibold mb-2 text-sm sm:text-base">YouTube Music Library</h3>
             <p className="text-white/70 text-xs sm:text-sm">
-              Broadcast audio from Spotify, Apple Music, YouTube, or any player
+              Search and stream millions of songs from YouTube. Build your own playlist in real-time
             </p>
           </div>
 
           <div className="glass p-4 sm:p-6 rounded-3xl">
             <div className="text-2xl sm:text-3xl mb-3">👥</div>
-            <h3 className="text-white font-semibold mb-2 text-sm sm:text-base">No Login Required</h3>
+            <h3 className="text-white font-semibold mb-2 text-sm sm:text-base">Collaborative Control</h3>
             <p className="text-white/70 text-xs sm:text-sm">
-              Share a room ID with friends. They click the link and start
-              listening instantly
+              Host manages the room. Promote guests to co-hosts for shared playlist control
             </p>
           </div>
 
           <div className="glass p-4 sm:p-6 rounded-3xl">
             <div className="text-2xl sm:text-3xl mb-3">💬</div>
-            <h3 className="text-white font-semibold mb-2 text-sm sm:text-base">Live Chat</h3>
+            <h3 className="text-white font-semibold mb-2 text-sm sm:text-base">Live Chat & Reactions</h3>
             <p className="text-white/70 text-xs sm:text-sm">
-              Chat with all participants in real-time while listening
+              Chat with all participants and react to messages with emojis in real-time
+            </p>
+          </div>
+
+          <div className="glass p-4 sm:p-6 rounded-3xl">
+            <div className="text-2xl sm:text-3xl mb-3">�</div>
+            <h3 className="text-white font-semibold mb-2 text-sm sm:text-base">No Accounts Needed</h3>
+            <p className="text-white/70 text-xs sm:text-sm">
+              Share a room link with friends. Instant access, no sign-ups required
+            </p>
+          </div>
+
+          <div className="glass p-4 sm:p-6 rounded-3xl">
+            <div className="text-2xl sm:text-3xl mb-3">⭐</div>
+            <h3 className="text-white font-semibold mb-2 text-sm sm:text-base">Guest Requests</h3>
+            <p className="text-white/70 text-xs sm:text-sm">
+              Guests can request songs. Host/co-hosts approve to add to the queue
+            </p>
+          </div>
+
+          <div className="glass p-4 sm:p-6 rounded-3xl">
+            <div className="text-2xl sm:text-3xl mb-3">�</div>
+            <h3 className="text-white font-semibold mb-2 text-sm sm:text-base">Works Everywhere</h3>
+            <p className="text-white/70 text-xs sm:text-sm">
+              Desktop, tablet, mobile. All major browsers supported including Safari & Brave
             </p>
           </div>
         </div>
@@ -72,7 +94,7 @@ export default function Home() {
               <div>
                 <h4 className="text-white font-bold text-sm sm:text-base">Create a Room</h4>
                 <p className="text-purple-100 text-xs sm:text-sm">
-                  Click "Start Broadcasting" to create a new room
+                  Click "Start Broadcasting" and enter your display name to create your room
                 </p>
               </div>
             </div>
@@ -82,10 +104,9 @@ export default function Home() {
                 2
               </div>
               <div>
-                <h4 className="text-white font-bold text-sm sm:text-base">Play Your Music</h4>
+                <h4 className="text-white font-bold text-sm sm:text-base">Search & Add Songs</h4>
                 <p className="text-purple-100 text-xs sm:text-sm">
-                  Open Spotify, Apple Music, YouTube, or any player and press
-                  play
+                  Use the built-in YouTube search to find and add songs to your queue
                 </p>
               </div>
             </div>
@@ -97,7 +118,7 @@ export default function Home() {
               <div>
                 <h4 className="text-white font-bold text-sm sm:text-base">Share the Link</h4>
                 <p className="text-purple-100 text-xs sm:text-sm">
-                  Copy your room ID and send it to friends
+                  Copy your room link and send to friends. No login needed for them to join
                 </p>
               </div>
             </div>
@@ -107,9 +128,9 @@ export default function Home() {
                 4
               </div>
               <div>
-                <h4 className="text-white font-bold text-sm sm:text-base">Everyone Listens</h4>
+                <h4 className="text-white font-bold text-sm sm:text-base">Enjoy Together</h4>
                 <p className="text-purple-100 text-xs sm:text-sm">
-                  Friends join the room and hear your music in real-time
+                  Everyone syncs to the same song. Chat, request songs, and enjoy music together
                 </p>
               </div>
             </div>
@@ -118,7 +139,7 @@ export default function Home() {
 
         {/* Footer */}
         <div className="text-center text-white/60 text-xs sm:text-sm">
-          <p>No uploads. No accounts. Just pure streaming magic. ✨</p>
+          <p>YouTube music library. Zero setup. Pure streaming joy. 🎧✨</p>
         </div>
       </div>
     </div>

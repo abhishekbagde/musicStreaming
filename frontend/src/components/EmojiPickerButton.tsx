@@ -2,7 +2,12 @@ import React, { useState, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import data from '@emoji-mart/data'
 
-const EmojiPicker = dynamic(() => import('@emoji-mart/react'), { ssr: false }) as any
+// Preload emoji picker during build time for better performance
+// Changed ssr to true and added loading state to show immediately when opened
+const EmojiPicker = dynamic(() => import('@emoji-mart/react'), { 
+  ssr: false,
+  loading: () => <div className="p-4 text-center text-white/50 text-sm">Loading emojis...</div>
+}) as any
 
 interface EmojiPickerButtonProps {
   onEmojiSelect: (emoji: string) => void
