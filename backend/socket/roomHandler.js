@@ -158,4 +158,66 @@ export function roomHandler(io, socket, roomManager) {
       socket.emit('error', { message: 'Failed to get participants' })
     }
   })
+
+  // Heartbeat handler - keeps connection alive while songs are playing
+  socket.on('heartbeat', (data) => {
+    try {
+      const { roomId } = data
+      if (roomId) {
+        console.log(`💓 Heartbeat received from ${socket.id} in room ${roomId}`)
+      }
+    } catch (error) {
+      console.error('Error processing heartbeat:', error)
+    }
+  })
+
+  // Room rejoin handler - for reconnection after disconnect
+  socket.on('room:rejoin', (data) => {
+    try {
+      const { roomId } = data
+      if (!roomId) {
+        socket.emit('error', { message: 'Room ID is required' })
+        return
+      }
+
+      const room = roomManager.getRoom(roomId)
+      if (!room) {
+        socket.emit('error', { message: 'Room not found' })
+        return
+      }
+
+      // Add user back to the room if they were previously a member
+      const isAlreadyMember = room.participants.includes(socket.id)
+      if (!isAlreadyMember) {
+        room.participants.push(socket.id)
+      }
+
+      socket.join(roomId)
+      socket.emit('room:rejoined', { roomId, success: true })
+
+      // Send current state to reconnected user
+      socket.emit('participants:list', {
+        participants: room.participants.map((id) => {
+          const session = roomManager.getUserSession(id)
+          return {
+            userId: id,
+            username: session?.username || 'Unknown',
+            isHost: room.hostId === id,
+          }
+        }),
+      })
+
+      // Send current playlist state
+      socket.emit('playlist:update', {
+        queue: roomManager.getQueue(roomId),
+        currentSong: roomManager.getCurrentSong(roomId),
+        ...roomManager.getPlaybackState(roomId),
+      })
+
+      console.log(`User ${socket.id} rejoined room ${roomId}`)
+    } catch (error) {
+      console.error('Error rejoining room:', error)
+      socket.emit('error', { message: 'Failed to rejoin room' })
+    }
+  })
 }

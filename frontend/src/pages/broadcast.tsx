@@ -73,9 +73,11 @@ export default function BroadcastPage() {
   const [isHost, setIsHost] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [audioConsent, setAudioConsent] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('connected')
 
   // --- Refs ---
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const playbackMetaRef = useRef<{ videoId: string | null; startedAt: number | null }>({
     videoId: null,
     startedAt: null,
@@ -138,6 +140,39 @@ export default function BroadcastPage() {
 
   // --- Socket.io Listeners ---
   useEffect(() => {
+    // Connection status monitoring
+    socket.on('connect', () => {
+      console.log('✅ Connected to server')
+      setConnectionStatus('connected')
+      setError('')
+    })
+
+    socket.on('disconnect', (reason) => {
+      console.log('❌ Disconnected:', reason)
+      setConnectionStatus('disconnected')
+      setError(`Connection lost: ${reason}`)
+    })
+
+    socket.on('reconnect_attempt', () => {
+      console.log('🔄 Attempting to reconnect...')
+      setConnectionStatus('reconnecting')
+    })
+
+    socket.on('reconnect', () => {
+      console.log('✅ Reconnected successfully!')
+      setConnectionStatus('connected')
+      setError('')
+      // Re-join room after reconnection
+      if (roomId) {
+        socket.emit('room:rejoin', { roomId })
+      }
+    })
+
+    socket.on('connect_error', (error) => {
+      console.error('🔌 Connection error:', error)
+      setConnectionStatus('disconnected')
+    })
+
     // Room events
     socket.on('room:created', (data) => {
       setRoomId(data.roomId)
@@ -248,6 +283,33 @@ export default function BroadcastPage() {
   useEffect(() => {
     latestRoomMetaRef.current = { roomId, isHost }
   }, [roomId, isHost])
+
+  // --- Heartbeat to keep connection alive while playing ---
+  useEffect(() => {
+    if (!isPlaying || !roomId) {
+      // Clear heartbeat when not playing
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current)
+        heartbeatIntervalRef.current = null
+      }
+      return
+    }
+
+    // Send heartbeat every 25 seconds while song is playing
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (roomId) {
+        socket.emit('heartbeat', { roomId })
+        console.log('💓 Heartbeat sent to keep connection alive')
+      }
+    }, 25000)
+
+    return () => {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current)
+        heartbeatIntervalRef.current = null
+      }
+    }
+  }, [isPlaying, roomId])
 
   useEffect(() => {
     if (audioConsent && playerReady && playbackRequestRef.current && playerRef.current) {
@@ -507,6 +569,28 @@ export default function BroadcastPage() {
         className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none overflow-hidden"
         aria-hidden="true"
       />
+
+      {/* Connection Status Indicator */}
+      <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold backdrop-blur">
+        {connectionStatus === 'connected' && (
+          <>
+            <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+            <span className="text-green-300">Connected</span>
+          </>
+        )}
+        {connectionStatus === 'reconnecting' && (
+          <>
+            <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full animate-spin"></span>
+            <span className="text-yellow-300">Reconnecting...</span>
+          </>
+        )}
+        {connectionStatus === 'disconnected' && (
+          <>
+            <span className="inline-block w-2 h-2 bg-red-400 rounded-full"></span>
+            <span className="text-red-300">Disconnected</span>
+          </>
+        )}
+      </div>
       
       {!audioConsent && (
         <div className="fixed inset-x-0 bottom-0 z-20 px-4 pb-6 pt-2 pointer-events-none">

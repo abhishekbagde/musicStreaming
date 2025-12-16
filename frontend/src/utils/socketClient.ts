@@ -6,7 +6,7 @@ export const socket = io(SOCKET_URL, {
   reconnection: true,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
-  reconnectionAttempts: 5,
+  reconnectionAttempts: Infinity,  // Infinite reconnection attempts - never stops trying
   transports: ['websocket', 'polling'],
 })
 
