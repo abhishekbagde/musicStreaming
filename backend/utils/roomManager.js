@@ -11,6 +11,7 @@ class RoomManager {
       roomName,
       hostId,
       participants: [hostId],
+      cohosts: [], // Array of user IDs who are co-hosts
       isLive: false,
       createdAt: new Date(),
       stats: {
@@ -293,6 +294,43 @@ class RoomManager {
   isHostOfRoom(userId, roomId) {
     const room = this.rooms[roomId]
     return room && room.hostId === userId
+  }
+
+  promoteCohost(roomId, userId) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    if (!room.participants.includes(userId)) {
+      return { success: false, error: 'User not in room' }
+    }
+    if (!room.cohosts.includes(userId)) {
+      room.cohosts.push(userId)
+      console.log(`✅ User ${userId} promoted to co-host in room ${roomId}`)
+      return { success: true, message: 'User promoted to co-host' }
+    }
+    return { success: false, error: 'User is already a co-host' }
+  }
+
+  demoteCohost(roomId, userId) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    const index = room.cohosts.indexOf(userId)
+    if (index > -1) {
+      room.cohosts.splice(index, 1)
+      console.log(`👤 User ${userId} demoted from co-host in room ${roomId}`)
+      return { success: true, message: 'User demoted from co-host' }
+    }
+    return { success: false, error: 'User is not a co-host' }
+  }
+
+  isCohost(roomId, userId) {
+    const room = this.rooms[roomId]
+    return room && room.cohosts.includes(userId)
+  }
+
+  canManageSongs(roomId, userId) {
+    const room = this.rooms[roomId]
+    if (!room) return false
+    return room.hostId === userId || room.cohosts.includes(userId)
   }
 }
 

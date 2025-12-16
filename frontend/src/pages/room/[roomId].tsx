@@ -24,6 +24,7 @@ interface Participant {
   userId: string
   username: string
   isHost: boolean
+  role?: 'host' | 'cohost' | 'guest' // 'cohost' = promoted guest
 }
 
 const extractVideoId = (song: Song | null) => {
@@ -256,6 +257,7 @@ export default function RoomPage() {
         userId: p.userId,
         username: p.username,
         isHost: p.isHost,
+        role: p.role,
       })) || []
       setParticipants(participantsList)
       console.log('👥 Participants:', participantsList.length)
@@ -273,6 +275,7 @@ export default function RoomPage() {
               userId: data.userId,
               username: data.username,
               isHost: data.isHost || false,
+              role: data.role,
             },
           ]
         }
@@ -327,6 +330,26 @@ export default function RoomPage() {
       router.push('/browse')
     })
 
+    // User promoted to co-host
+    socket.on('user:promoted-cohost', (data) => {
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.userId === data.userId ? { ...p, role: 'cohost' } : p
+        )
+      )
+      console.log('⭐ User promoted to co-host:', data.userId)
+    })
+
+    // User demoted from co-host
+    socket.on('user:demoted-cohost', (data) => {
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.userId === data.userId ? { ...p, role: 'guest' } : p
+        )
+      )
+      console.log('👤 User demoted from co-host:', data.userId)
+    })
+
     // Cleanup
     return () => {
       socket.off('room:joined')
@@ -338,6 +361,8 @@ export default function RoomPage() {
       socket.off('playlist:update')
       socket.off('chat:message')
       socket.off('room:closed')
+      socket.off('user:promoted-cohost')
+      socket.off('user:demoted-cohost')
       socket.emit('room:leave')
     }
   }, [queuePlayback, roomId, router])
@@ -589,13 +614,23 @@ export default function RoomPage() {
             <h2 className="text-lg sm:text-xl font-bold mb-4 text-white">
               👥 Participants ({participants.length})
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+            <div className="space-y-2">
               {participants.map((p) => (
                 <div
                   key={p.userId}
-                  className="bg-white/10 px-3 sm:px-4 py-2 sm:py-3 rounded-2xl text-white font-semibold text-center text-xs sm:text-sm border border-white/10"
+                  className="bg-white/10 text-white px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm border border-white/10 flex items-center justify-between gap-2"
                 >
-                  {p.isHost ? '🎤' : '👥'} {p.username}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span>
+                      {p.isHost ? '🎤' : p.role === 'cohost' ? '⭐' : '👥'}
+                    </span>
+                    <span className="truncate">{p.username}</span>
+                    {p.role === 'cohost' && (
+                      <span className="text-xs bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded whitespace-nowrap">
+                        Co-Host
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

@@ -8,6 +8,12 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
+    // Only host and co-hosts can add songs
+    if (!roomManager.canManageSongs(roomId, socket.id)) {
+      socket.emit('error', { message: 'Only host and co-hosts can add songs' })
+      return
+    }
+
     // Add song to queue
     roomManager.addSongToQueue(roomId, song)
     const queue = roomManager.getQueue(roomId)
@@ -31,9 +37,9 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
-    // Only host can remove songs
-    if (room.hostId !== socket.id) {
-      socket.emit('error', { message: 'Only host can remove songs' })
+    // Only host and co-hosts can remove songs
+    if (!roomManager.canManageSongs(roomId, socket.id)) {
+      socket.emit('error', { message: 'Only host and co-hosts can remove songs' })
       return
     }
 
@@ -59,9 +65,9 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
-    // Only host can play songs
-    if (room.hostId !== socket.id) {
-      socket.emit('error', { message: 'Only host can play songs' })
+    // Only host and co-hosts can play songs
+    if (!roomManager.canManageSongs(roomId, socket.id)) {
+      socket.emit('error', { message: 'Only host and co-hosts can play songs' })
       return
     }
 
@@ -101,9 +107,9 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
-    // Only host can skip songs
-    if (room.hostId !== socket.id) {
-      socket.emit('error', { message: 'Only host can skip songs' })
+    // Only host and co-hosts can skip songs
+    if (!roomManager.canManageSongs(roomId, socket.id)) {
+      socket.emit('error', { message: 'Only host and co-hosts can skip songs' })
       return
     }
 
@@ -202,8 +208,9 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
-    if (room.hostId !== socket.id) {
-      socket.emit('error', { message: 'Only host can pause songs' })
+    // Only host and co-hosts can pause songs
+    if (!roomManager.canManageSongs(roomId, socket.id)) {
+      socket.emit('error', { message: 'Only host and co-hosts can pause songs' })
       return
     }
 
@@ -230,8 +237,9 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
-    if (room.hostId !== socket.id) {
-      socket.emit('error', { message: 'Only host can resume songs' })
+    // Only host and co-hosts can resume songs
+    if (!roomManager.canManageSongs(roomId, socket.id)) {
+      socket.emit('error', { message: 'Only host and co-hosts can resume songs' })
       return
     }
 
@@ -262,8 +270,9 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
-    if (room.hostId !== socket.id) {
-      socket.emit('error', { message: 'Only host can go to previous song' })
+    // Only host and co-hosts can go to previous song
+    if (!roomManager.canManageSongs(roomId, socket.id)) {
+      socket.emit('error', { message: 'Only host and co-hosts can go to previous song' })
       return
     }
 
@@ -298,8 +307,9 @@ export const playlistHandler = (io, socket, roomManager) => {
       return
     }
 
-    if (room.hostId !== socket.id) {
-      socket.emit('error', { message: 'Only host can choose songs' })
+    // Only host and co-hosts can choose songs
+    if (!roomManager.canManageSongs(roomId, socket.id)) {
+      socket.emit('error', { message: 'Only host and co-hosts can choose songs' })
       return
     }
 

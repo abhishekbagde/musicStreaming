@@ -29,6 +29,7 @@ export function roomHandler(io, socket, roomManager) {
             userId: id,
             username: session?.username || 'Host',
             isHost: room_data.hostId === id,
+            role: room_data.hostId === id ? 'host' : room_data.cohosts.includes(id) ? 'cohost' : 'guest',
           }
         }),
       })
@@ -76,6 +77,7 @@ export function roomHandler(io, socket, roomManager) {
             userId: id,
             username: session?.username || 'Unknown',
             isHost: room.hostId === id,
+            role: room.hostId === id ? 'host' : room.cohosts.includes(id) ? 'cohost' : 'guest',
           }
         }),
       })
@@ -85,6 +87,7 @@ export function roomHandler(io, socket, roomManager) {
         userId,
         username: username || `Guest_${Math.random().toString(36).substr(2, 5)}`,
         isHost: false,
+        role: 'guest',
         participantCount: room.participants.length,
       })
 
@@ -150,6 +153,7 @@ export function roomHandler(io, socket, roomManager) {
             userId: id,
             username: session?.username || 'Unknown',
             isHost: room.hostId === id,
+            role: room.hostId === id ? 'host' : room.cohosts.includes(id) ? 'cohost' : 'guest',
           }
         }),
       })
@@ -203,6 +207,7 @@ export function roomHandler(io, socket, roomManager) {
             userId: id,
             username: session?.username || 'Unknown',
             isHost: room.hostId === id,
+            role: room.hostId === id ? 'host' : room.cohosts.includes(id) ? 'cohost' : 'guest',
           }
         }),
       })
@@ -218,6 +223,80 @@ export function roomHandler(io, socket, roomManager) {
     } catch (error) {
       console.error('Error rejoining room:', error)
       socket.emit('error', { message: 'Failed to rejoin room' })
+    }
+  })
+
+  // Promote user to co-host
+  socket.on('user:promote-cohost', (data) => {
+    try {
+      const { roomId, userId } = data
+      const hostId = socket.id
+
+      if (!roomId || !userId) {
+        socket.emit('error', { message: 'Room ID and User ID are required' })
+        return
+      }
+
+      // Check if requester is the host
+      if (!roomManager.isHostOfRoom(hostId, roomId)) {
+        socket.emit('error', { message: 'Only the host can promote users' })
+        return
+      }
+
+      // Promote the user
+      const result = roomManager.promoteCohost(roomId, userId)
+      if (!result.success) {
+        socket.emit('error', { message: result.error })
+        return
+      }
+
+      // Broadcast promotion event to all users in the room
+      io.to(roomId).emit('user:promoted-cohost', {
+        userId,
+        promotedBy: hostId,
+      })
+
+      console.log(`⭐ User ${userId} promoted to co-host in room ${roomId}`)
+    } catch (error) {
+      console.error('Error promoting co-host:', error)
+      socket.emit('error', { message: 'Failed to promote user' })
+    }
+  })
+
+  // Demote user from co-host
+  socket.on('user:demote-cohost', (data) => {
+    try {
+      const { roomId, userId } = data
+      const hostId = socket.id
+
+      if (!roomId || !userId) {
+        socket.emit('error', { message: 'Room ID and User ID are required' })
+        return
+      }
+
+      // Check if requester is the host
+      if (!roomManager.isHostOfRoom(hostId, roomId)) {
+        socket.emit('error', { message: 'Only the host can demote users' })
+        return
+      }
+
+      // Demote the user
+      const result = roomManager.demoteCohost(roomId, userId)
+      if (!result.success) {
+        socket.emit('error', { message: result.error })
+        return
+      }
+
+      // Broadcast demotion event to all users in the room
+      io.to(roomId).emit('user:demoted-cohost', {
+        userId,
+        demotedBy: hostId,
+      })
+
+      console.log(`👤 User ${userId} demoted from co-host in room ${roomId}`)
+    } catch (error) {
+      console.error('Error demoting co-host:', error)
+      socket.emit('error', { message: 'Failed to demote user' })
     }
   })
 }
