@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import { socket } from '@/utils/socketClient'
+import { apiClient } from '@/utils/apiClient'
 import { loadYouTubeIframeAPI } from '@/utils/youtubeLoader'
 
 interface Song {
@@ -26,6 +27,11 @@ interface Participant {
   isHost: boolean
   role?: 'host' | 'cohost' | 'guest' // 'cohost' = promoted guest
 }
+
+const normalizeParticipant = (participant: Participant): Participant => ({
+  ...participant,
+  role: participant.role || (participant.isHost ? 'host' : 'guest'),
+})
 
 const extractVideoId = (song: Song | null) => {
   if (!song) return null
@@ -57,11 +63,15 @@ export default function RoomPage() {
   // --- Router & Query Params ---
   const router = useRouter()
   const { roomId } = router.query
+  const currentRoomId = typeof roomId === 'string' ? roomId : Array.isArray(roomId) ? roomId[0] : null
 
   // --- Chat & Participants ---
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [messageInput, setMessageInput] = useState('')
   const [participants, setParticipants] = useState<Participant[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<Song[]>([])
+  const [canManageSongs, setCanManageSongs] = useState(false)
 
   // --- Playlist State ---
   const [queue, setQueue] = useState<Song[]>([])
@@ -208,7 +218,7 @@ export default function RoomPage() {
 
   // --- Socket.io Listeners ---
   useEffect(() => {
-    if (!roomId) return
+    if (!currentRoomId) return
 
     // Connection status monitoring
     socket.on('connect', () => {
@@ -231,8 +241,8 @@ export default function RoomPage() {
       setConnectionStatus('connected')
       // Re-join room after reconnection
       const username = router.query.username as string
-      if (username) {
-        socket.emit('room:join', { roomId, username })
+      if (username && currentRoomId) {
+        socket.emit('room:join', { roomId: currentRoomId, username })
       }
     })
 
@@ -243,22 +253,25 @@ export default function RoomPage() {
 
     // Join room
     const username = router.query.username as string
-    socket.emit('room:join', { roomId, username })
+    socket.emit('room:join', { roomId: currentRoomId, username })
 
     // Room joined confirmation
     socket.on('room:joined', () => {
       setIsConnected(true)
-      console.log('✅ Joined room:', roomId)
+      console.log('✅ Joined room:', currentRoomId)
     })
 
     // Participants list update
     socket.on('participants:list', (data: any) => {
-      const participantsList = data.participants?.map((p: any) => ({
-        userId: p.userId,
-        username: p.username,
-        isHost: p.isHost,
-        role: p.role,
-      })) || []
+      const participantsList =
+        data.participants?.map((p: any) =>
+          normalizeParticipant({
+            userId: p.userId,
+            username: p.username,
+            isHost: p.isHost,
+            role: p.role,
+          })
+        ) || []
       setParticipants(participantsList)
       console.log('👥 Participants:', participantsList.length)
     })
@@ -271,13 +284,13 @@ export default function RoomPage() {
           console.log('➕ User joined:', data.username)
           return [
             ...prev,
-            {
+            normalizeParticipant({
               userId: data.userId,
               username: data.username,
               isHost: data.isHost || false,
               role: data.role,
-            },
-          ]
+            }),
+            ]
         }
         return prev
       })
@@ -365,7 +378,7 @@ export default function RoomPage() {
       socket.off('user:demoted-cohost')
       socket.emit('room:leave')
     }
-  }, [queuePlayback, roomId, router])
+  }, [queuePlayback, currentRoomId, router])
 
   useEffect(() => {
     if (audioConsent) return
@@ -387,7 +400,7 @@ export default function RoomPage() {
 
   // --- Heartbeat to keep connection alive while playing ---
   useEffect(() => {
-    if (!isPlaying || !roomId) {
+    if (!isPlaying || !currentRoomId) {
       // Clear heartbeat when not playing
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current)
@@ -398,8 +411,8 @@ export default function RoomPage() {
 
     // Send heartbeat every 25 seconds while song is playing
     heartbeatIntervalRef.current = setInterval(() => {
-      if (roomId) {
-        socket.emit('heartbeat', { roomId })
+      if (currentRoomId) {
+        socket.emit('heartbeat', { roomId: currentRoomId })
         console.log('💓 [guest] Heartbeat sent to keep connection alive')
       }
     }, 25000)
@@ -410,11 +423,28 @@ export default function RoomPage() {
         heartbeatIntervalRef.current = null
       }
     }
-  }, [isPlaying, roomId])
+  }, [isPlaying, currentRoomId])
 
   useEffect(() => {
     flushPendingPlayback()
   }, [flushPendingPlayback])
+
+  useEffect(() => {
+    const myId = socket.id
+    if (!myId) {
+      setCanManageSongs(false)
+      return
+    }
+    const me = participants.find((p) => p.userId === myId)
+    setCanManageSongs(!!me && (me.isHost || me.role === 'cohost'))
+  }, [participants])
+
+  useEffect(() => {
+    if (!canManageSongs) {
+      setSearchResults([])
+      setSearchQuery('')
+    }
+  }, [canManageSongs])
 
   useEffect(() => {
     if (playerRef.current || !playerContainerReady || !playerContainerRef.current) return
@@ -472,11 +502,62 @@ export default function RoomPage() {
     }
   }, [])
 
+  const handleYouTubeSearch = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!canManageSongs || !searchQuery.trim()) return
+    try {
+      const data = await apiClient.search(searchQuery)
+      setSearchResults(data.results || [])
+    } catch (err) {
+      console.error('YouTube search failed', err)
+      setSearchResults([])
+    }
+  }
+
+  const handleAddSong = (song: Song) => {
+    if (!currentRoomId || !canManageSongs) return
+    socket.emit('song:add', { roomId: currentRoomId, song })
+  }
+
+  const handleRemoveSong = (songId: string) => {
+    if (!currentRoomId || !canManageSongs) return
+    socket.emit('song:remove', { roomId: currentRoomId, songId })
+  }
+
+  const handleSkip = () => {
+    if (!currentRoomId || !canManageSongs) return
+    socket.emit('song:skip', { roomId: currentRoomId })
+  }
+
+  const handlePrevious = () => {
+    if (!currentRoomId || !canManageSongs) return
+    socket.emit('song:previous', { roomId: currentRoomId })
+  }
+
+  const handlePlaySpecific = (songId: string) => {
+    if (!currentRoomId || !canManageSongs) return
+    socket.emit('song:playSpecific', { roomId: currentRoomId, songId })
+  }
+
+  const handleTogglePlayback = () => {
+    if (!currentRoomId || !canManageSongs) return
+    if (isPlaying) {
+      socket.emit('song:pause', { roomId: currentRoomId })
+      return
+    }
+    if (currentSong) {
+      socket.emit('song:resume', { roomId: currentRoomId })
+    } else {
+      socket.emit('song:play', { roomId: currentRoomId })
+    }
+  }
+
   // --- Chat Handler ---
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault()
     if (!messageInput.trim()) return
-    socket.emit('chat:message', { roomId, message: messageInput })
+    if (!currentRoomId) return
+    socket.emit('chat:message', { roomId: currentRoomId, message: messageInput })
     setMessageInput('')
   }
 
@@ -555,6 +636,63 @@ export default function RoomPage() {
               <span>🎵</span> <span>Music Queue</span>
             </h2>
 
+            {canManageSongs && (
+              <form onSubmit={handleYouTubeSearch} className="space-y-3 mb-4">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search YouTube to add songs..."
+                    className="w-full px-3 sm:px-4 py-3 border border-white/10 rounded-2xl bg-white/5 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400 text-sm sm:text-base"
+                  />
+                  <button
+                    type="submit"
+                    className="w-full sm:w-auto bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 sm:px-6 py-3 rounded-2xl font-semibold transition shadow-lg text-sm sm:text-base whitespace-nowrap"
+                  >
+                    🔍 Search
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {canManageSongs && searchResults.length > 0 && (
+              <div className="mb-6 border border-white/10 rounded-2xl overflow-hidden bg-slate-950/60">
+                <div className="px-3 sm:px-4 py-2 border-b border-white/5 font-semibold text-xs sm:text-sm text-white/70">Search Results</div>
+                <ul className="max-h-[40vh] overflow-y-auto divide-y divide-white/5">
+                  {searchResults.map((song) => (
+                    <li key={song.id} className="p-3 hover:bg-white/5 transition-colors">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          {song.thumbnail && (
+                            <img
+                              src={song.thumbnail}
+                              alt={`${song.title} thumbnail`}
+                              className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover flex-shrink-0"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="font-semibold text-white text-sm sm:text-base line-clamp-2">{song.title}</div>
+                            <div className="text-xs sm:text-sm text-white/60 line-clamp-1">{song.author}</div>
+                            <div className="text-xs text-white/50">{song.duration || 'N/A'}</div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            handleAddSong(song)
+                            setSearchResults([])
+                          }}
+                          className="w-full bg-emerald-500 text-slate-950 px-3 py-2 rounded-2xl font-semibold text-center tracking-wide text-sm hover:bg-emerald-400 transition"
+                        >
+                          + Add to Queue
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Now Playing */}
             {nowPlaying && (
               <div className="mb-6">
@@ -562,6 +700,28 @@ export default function RoomPage() {
                   <div className="text-xs sm:text-sm font-semibold tracking-wider mb-2 text-white/70">NOW PLAYING</div>
                   <div className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2 line-clamp-2">{nowPlaying.title}</div>
                   <div className="text-sm sm:text-base text-white/80 mb-4 line-clamp-1">{nowPlaying.author}</div>
+                  {canManageSongs && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+                      <button
+                        onClick={handlePrevious}
+                        className="bg-purple-900/70 text-white px-4 py-2 sm:py-3 rounded-2xl font-semibold hover:bg-purple-800 transition text-sm sm:text-base"
+                      >
+                        ⏮️ Previous
+                      </button>
+                      <button
+                        onClick={handleTogglePlayback}
+                        className="bg-white/90 text-purple-700 px-4 py-2 sm:py-3 rounded-2xl font-semibold hover:bg-white transition text-sm sm:text-base"
+                      >
+                        {isPlaying ? '⏸️ Pause' : currentSong ? '▶️ Resume' : '▶️ Play'}
+                      </button>
+                      <button
+                        onClick={handleSkip}
+                        className="bg-purple-900/70 text-white px-4 py-2 sm:py-3 rounded-2xl font-semibold hover:bg-purple-800 transition text-sm sm:text-base"
+                      >
+                        ⏭️ Next
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -572,7 +732,9 @@ export default function RoomPage() {
               {queue.length === 0 ? (
                 <div className="bg-white/5 rounded-3xl p-6 sm:p-8 text-center text-white/60 border border-white/10 w-full">
                   <div className="text-3xl sm:text-4xl mb-2">🎧</div>
-                  <p className="text-sm sm:text-base">Waiting for host to add songs...</p>
+                  <p className="text-sm sm:text-base">
+                    {canManageSongs ? 'No songs in queue yet. Use the search above to add something!' : 'Waiting for host to add songs...'}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-2 sm:space-y-3 w-full">
@@ -601,6 +763,25 @@ export default function RoomPage() {
                             <div className="text-xs sm:text-sm text-white/60 line-clamp-1">{song.author}</div>
                           </div>
                         </div>
+                        {canManageSongs && (
+                          <div className="flex items-center gap-2 flex-wrap w-full">
+                            <button
+                              onClick={() => handlePlaySpecific(song.id)}
+                              className={`flex-1 min-w-[80px] px-3 py-2 rounded-2xl text-xs sm:text-sm font-semibold transition ${
+                                isCurrent ? 'bg-white text-purple-700' : 'bg-emerald-500/90 text-slate-950 hover:bg-emerald-400'
+                              }`}
+                            >
+                              ▶ Play
+                            </button>
+                            <button
+                              onClick={() => handleRemoveSong(song.id)}
+                              className="bg-red-500/80 hover:bg-red-500 text-white px-3 py-2 rounded-2xl transition text-xs sm:text-sm font-semibold"
+                              title="Remove"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
