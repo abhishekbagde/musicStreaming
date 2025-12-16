@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import { socket } from '@/utils/socketClient'
 import { EmojiPickerButton } from '@/components/EmojiPickerButton'
+import { MessageReactions } from '@/components/MessageReactions'
 import { apiClient } from '@/utils/apiClient'
 import { loadYouTubeIframeAPI } from '@/utils/youtubeLoader'
 
@@ -14,7 +15,16 @@ interface Song {
   url: string
 }
 
+interface SongRequest {
+  id: string
+  song: Song
+  requestedBy: string
+  requestedByName: string
+  requestedAt: string
+}
+
 interface ChatMessage {
+  messageId: string
   userId: string
   username: string
   message: string
@@ -68,6 +78,7 @@ export default function RoomPage() {
 
   // --- Chat & Participants ---
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messageReactions, setMessageReactions] = useState<Record<string, Record<string, string[]>>>({})
   const [messageInput, setMessageInput] = useState('')
   const [participants, setParticipants] = useState<Participant[]>([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -78,6 +89,7 @@ export default function RoomPage() {
   const [queue, setQueue] = useState<Song[]>([])
   const [currentSong, setCurrentSong] = useState<Song | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [songRequests, setSongRequests] = useState<SongRequest[]>([])
 
   // --- Broadcast State ---
   const [isConnected, setIsConnected] = useState(false)
@@ -98,6 +110,7 @@ export default function RoomPage() {
   const playerRef = useRef<any>(null)
   const playerContainerRef = useRef<HTMLDivElement | null>(null)
   const messageInputRef = useRef<HTMLInputElement | null>(null)
+  const dragSongIndexRef = useRef<number | null>(null)
   const [playerContainerReady, setPlayerContainerReady] = useState(false)
   const registerPlayerContainer = useCallback((node: HTMLDivElement | null) => {
     playerContainerRef.current = node
@@ -107,6 +120,7 @@ export default function RoomPage() {
   }, [])
   const [playerReady, setPlayerReady] = useState(false)
   const pendingPlayerInitRef = useRef<Promise<void> | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
   const flushPendingPlayback = useCallback(() => {
     if (!playerReady || !playerRef.current) return
@@ -217,6 +231,48 @@ export default function RoomPage() {
       }
     }
   }, [audioConsent, flushPendingPlayback, queuePlayback])
+
+  const applyReactionUpdate = useCallback(
+    (messageId: string, emoji: string, userId: string, action: 'add' | 'remove') => {
+      if (!messageId || !emoji || !userId) return
+      setMessageReactions((prev) => {
+        const nextState = { ...prev }
+        const current = { ...(nextState[messageId] || {}) }
+        const existingUsers = current[emoji] || []
+        let updatedUsers = existingUsers
+        if (action === 'remove') {
+          updatedUsers = existingUsers.filter((id) => id !== userId)
+        } else if (!existingUsers.includes(userId)) {
+          updatedUsers = [...existingUsers, userId]
+        }
+        if (updatedUsers.length === 0) {
+          delete current[emoji]
+        } else {
+          current[emoji] = updatedUsers
+        }
+        if (Object.keys(current).length === 0) {
+          delete nextState[messageId]
+        } else {
+          nextState[messageId] = current
+        }
+        return nextState
+      })
+    },
+    []
+  )
+
+  const handleReactToMessage = useCallback(
+    (messageId: string, emoji: string, hasReacted: boolean) => {
+      if (!currentRoomId || !emoji) return
+      const action = hasReacted ? 'remove' : 'add'
+      socket.emit('chat:reaction', { roomId: currentRoomId, messageId, emoji, action })
+      const userId = socket.id
+      if (userId) {
+        applyReactionUpdate(messageId, emoji, userId, action)
+      }
+    },
+    [currentRoomId, applyReactionUpdate]
+  )
 
   // --- Socket.io Listeners ---
   useEffect(() => {
@@ -336,7 +392,29 @@ export default function RoomPage() {
 
     // Chat message received
     socket.on('chat:message', (data: ChatMessage) => {
-      setMessages((prev) => [...prev, data])
+      const messageId =
+        typeof data.messageId === 'string' && data.messageId.length > 0
+          ? data.messageId
+          : `${data.userId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      setMessages((prev) => [...prev, { ...data, messageId }])
+      setMessageReactions((prev) => {
+        if (prev[messageId]) return prev
+        return { ...prev, [messageId]: {} }
+      })
+    })
+
+    socket.on('chat:reaction', (data) => {
+      if (!data?.messageId || !data?.emoji || !data?.userId) return
+      applyReactionUpdate(
+        data.messageId,
+        data.emoji,
+        data.userId,
+        data.action === 'remove' ? 'remove' : 'add'
+      )
+    })
+
+    socket.on('song:requests:update', (data) => {
+      setSongRequests(data.requests || [])
     })
 
     // Room closed by host
@@ -375,12 +453,14 @@ export default function RoomPage() {
       socket.off('broadcast:stopped')
       socket.off('playlist:update')
       socket.off('chat:message')
+      socket.off('chat:reaction')
+      socket.off('song:requests:update')
       socket.off('room:closed')
       socket.off('user:promoted-cohost')
       socket.off('user:demoted-cohost')
       socket.emit('room:leave')
     }
-  }, [queuePlayback, currentRoomId, router])
+  }, [queuePlayback, currentRoomId, router, applyReactionUpdate])
 
   useEffect(() => {
     if (audioConsent) return
@@ -506,10 +586,11 @@ export default function RoomPage() {
 
   const handleYouTubeSearch = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!canManageSongs || !searchQuery.trim()) return
+    if (!searchQuery.trim()) return
     try {
       const data = await apiClient.search(searchQuery)
       setSearchResults(data.results || [])
+      console.log('🔍 Search results:', data.results?.length || 0)
     } catch (err) {
       console.error('YouTube search failed', err)
       setSearchResults([])
@@ -541,6 +622,90 @@ export default function RoomPage() {
     socket.emit('song:playSpecific', { roomId: currentRoomId, songId })
   }
 
+  const reorderLocalQueue = useCallback((fromIndex: number, toIndex: number) => {
+    setQueue((prev) => {
+      const next = [...prev]
+      if (
+        fromIndex < 0 ||
+        fromIndex >= next.length ||
+        toIndex < 0 ||
+        toIndex >= next.length ||
+        fromIndex === toIndex
+      ) {
+        return prev
+      }
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
+  }, [])
+
+  const handleQueueDragStart = useCallback(
+    (index: number) => (event: React.DragEvent<HTMLDivElement>) => {
+      if (!canManageSongs) return
+      dragSongIndexRef.current = index
+      setDragOverIndex(index)
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData('text/plain', String(index))
+    },
+    [canManageSongs]
+  )
+
+  const handleQueueDragOver = useCallback(
+    (index: number) => (event: React.DragEvent<HTMLDivElement>) => {
+      if (!canManageSongs) return
+      event.preventDefault()
+      if (dragOverIndex !== index) {
+        setDragOverIndex(index)
+      }
+    },
+    [canManageSongs, dragOverIndex]
+  )
+
+  const handleQueueDrop = useCallback(
+    (index: number) => (event: React.DragEvent<HTMLDivElement>) => {
+      if (!canManageSongs) return
+      event.preventDefault()
+      const fromIndex = dragSongIndexRef.current
+      setDragOverIndex(null)
+      dragSongIndexRef.current = null
+      if (fromIndex === null || fromIndex === index || !currentRoomId) return
+      reorderLocalQueue(fromIndex, index)
+      socket.emit('song:reorder', { roomId: currentRoomId, fromIndex, toIndex: index })
+    },
+    [canManageSongs, currentRoomId, reorderLocalQueue]
+  )
+
+  const handleQueueDragEnd = useCallback(() => {
+    setDragOverIndex(null)
+    dragSongIndexRef.current = null
+  }, [])
+
+  const handleApproveRequest = useCallback(
+    (requestId: string) => {
+      if (!currentRoomId || !canManageSongs) return
+      socket.emit('song:request:approve', { roomId: currentRoomId, requestId })
+    },
+    [currentRoomId, canManageSongs]
+  )
+
+  const handleRejectRequest = useCallback(
+    (requestId: string) => {
+      if (!currentRoomId || !canManageSongs) return
+      socket.emit('song:request:reject', { roomId: currentRoomId, requestId })
+    },
+    [currentRoomId, canManageSongs]
+  )
+
+  const handleRequestSong = useCallback(
+    (song: Song) => {
+      if (!currentRoomId) return
+      socket.emit('song:request', { roomId: currentRoomId, song })
+      console.log('📮 Requested song:', song.title)
+    },
+    [currentRoomId]
+  )
+
   const handleTogglePlayback = () => {
     if (!currentRoomId || !canManageSongs) return
     if (isPlaying) {
@@ -553,7 +718,6 @@ export default function RoomPage() {
       socket.emit('song:play', { roomId: currentRoomId })
     }
   }
-
   const handleInsertEmoji = useCallback((emoji: string) => {
     setMessageInput((prev) => {
       const input = messageInputRef.current
@@ -597,6 +761,7 @@ export default function RoomPage() {
 
   // --- Render: Main Interface ---
   const nowPlaying = currentSong || (queue.length > 0 ? queue[0] : null)
+  const currentUserId = socket.id || null
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-900 text-white p-3 sm:p-4 lg:p-6">
@@ -656,27 +821,32 @@ export default function RoomPage() {
               <span>🎵</span> <span>Music Queue</span>
             </h2>
 
-            {canManageSongs && (
-              <form onSubmit={handleYouTubeSearch} className="space-y-3 mb-4">
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search YouTube to add songs..."
-                    className="w-full px-3 sm:px-4 py-3 border border-white/10 rounded-2xl bg-white/5 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400 text-sm sm:text-base"
-                  />
-                  <button
-                    type="submit"
-                    className="w-full sm:w-auto bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 sm:px-6 py-3 rounded-2xl font-semibold transition shadow-lg text-sm sm:text-base whitespace-nowrap"
-                  >
-                    🔍 Search
-                  </button>
-                </div>
-              </form>
-            )}
+            <form onSubmit={handleYouTubeSearch} className="space-y-3 mb-4">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={
+                    canManageSongs ? 'Search YouTube to add songs...' : 'Search YouTube to request a song...'
+                  }
+                  className="w-full px-3 sm:px-4 py-3 border border-white/10 rounded-2xl bg-white/5 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400 text-sm sm:text-base"
+                />
+                <button
+                  type="submit"
+                  className="w-full sm:w-auto bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 sm:px-6 py-3 rounded-2xl font-semibold transition shadow-lg text-sm sm:text-base whitespace-nowrap"
+                >
+                  🔍 Search
+                </button>
+              </div>
+              {!canManageSongs && (
+                <p className="text-xs text-white/60">
+                  You&apos;ll send a request for the host or co-host to approve.
+                </p>
+              )}
+            </form>
 
-            {canManageSongs && searchResults.length > 0 && (
+            {searchResults.length > 0 && (
               <div className="mb-6 border border-white/10 rounded-2xl overflow-hidden bg-slate-950/60">
                 <div className="px-3 sm:px-4 py-2 border-b border-white/5 font-semibold text-xs sm:text-sm text-white/70">Search Results</div>
                 <ul className="max-h-[40vh] overflow-y-auto divide-y divide-white/5">
@@ -697,15 +867,25 @@ export default function RoomPage() {
                             <div className="text-xs text-white/50">{song.duration || 'N/A'}</div>
                           </div>
                         </div>
-                        <button
-                          onClick={() => {
-                            handleAddSong(song)
-                            setSearchResults([])
-                          }}
-                          className="w-full bg-emerald-500 text-slate-950 px-3 py-2 rounded-2xl font-semibold text-center tracking-wide text-sm hover:bg-emerald-400 transition"
-                        >
-                          + Add to Queue
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              if (canManageSongs) {
+                                handleAddSong(song)
+                              } else {
+                                handleRequestSong(song)
+                              }
+                              setSearchResults([])
+                            }}
+                            className={`flex-1 px-3 py-2 rounded-2xl font-semibold text-center tracking-wide text-sm transition ${
+                              canManageSongs
+                                ? 'bg-emerald-500 text-slate-950 hover:bg-emerald-400'
+                                : 'bg-blue-500/80 text-white hover:bg-blue-400'
+                            }`}
+                          >
+                            {canManageSongs ? '+ Add to Queue' : 'Request Song'}
+                          </button>
+                        </div>
                       </div>
                     </li>
                   ))}
@@ -760,13 +940,21 @@ export default function RoomPage() {
                 <div className="space-y-2 sm:space-y-3 w-full">
                   {queue.map((song, idx) => {
                     const isCurrent = currentSong?.id === song.id
+                    const isDragTarget = canManageSongs && dragOverIndex === idx
                     return (
                       <div
                         key={song.id}
+                        draggable={canManageSongs}
+                        onDragStart={handleQueueDragStart(idx)}
+                        onDragOver={handleQueueDragOver(idx)}
+                        onDrop={handleQueueDrop(idx)}
+                        onDragEnd={handleQueueDragEnd}
                         className={`flex flex-col gap-3 p-3 rounded-2xl border transition-colors w-full ${
                           isCurrent
-                            ? 'bg-gradient-to-r from-purple-700/30 to-indigo-700/20 border-purple-400/40 shadow-lg'
+                            ? 'bg-gradient-to-r from-purple-700/30 to-indigo-700/20 border-purple-400/60 shadow-lg'
                             : 'bg-slate-900/40 border-white/5'
+                        } ${isDragTarget ? 'border-dashed border-purple-300/80 bg-purple-950/30' : ''} ${
+                          canManageSongs ? 'cursor-grab' : ''
                         }`}
                       >
                         <div className="flex items-start gap-2 sm:gap-3 min-w-0 w-full">
@@ -800,6 +988,72 @@ export default function RoomPage() {
                             >
                               ✕
                             </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-slate-900/70 border border-yellow-200/10 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-lg sm:text-xl text-white">Song Requests ({songRequests.length})</h3>
+                {canManageSongs ? (
+                  <span className="text-xs text-white/50">Approve or dismiss guest suggestions</span>
+                ) : (
+                  <span className="text-xs text-white/50">Requests go to the host/co-host</span>
+                )}
+              </div>
+              {songRequests.length === 0 ? (
+                <div className="text-white/60 text-sm sm:text-base bg-white/5 rounded-2xl p-4 text-center border border-white/10">
+                  No pending requests yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {songRequests.map((request) => {
+                    const isMine = currentUserId ? request.requestedBy === currentUserId : false
+                    return (
+                      <div
+                        key={request.id}
+                        className="bg-white/5 border border-white/10 rounded-2xl p-3 sm:p-4 flex flex-col gap-2"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm sm:text-base font-semibold text-white line-clamp-1">
+                              {request.song.title}
+                            </div>
+                            <div className="text-xs text-white/60 line-clamp-1">{request.song.author}</div>
+                          </div>
+                          <span className="text-xs text-white/50">
+                            {new Date(request.requestedAt).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <div className="text-xs text-white/60">
+                          Requested by{' '}
+                          <span className="text-white">
+                            {isMine ? 'You' : request.requestedByName || 'Guest'}
+                          </span>
+                        </div>
+                        {canManageSongs ? (
+                          <div className="flex gap-2 flex-wrap">
+                            <button
+                              onClick={() => handleApproveRequest(request.id)}
+                              className="flex-1 min-w-[120px] bg-emerald-500/80 hover:bg-emerald-400 text-slate-950 font-semibold rounded-2xl px-3 py-2 text-sm transition"
+                            >
+                              ✅ Approve
+                            </button>
+                            <button
+                              onClick={() => handleRejectRequest(request.id)}
+                              className="flex-1 min-w-[120px] bg-red-500/60 hover:bg-red-500 text-white font-semibold rounded-2xl px-3 py-2 text-sm transition"
+                            >
+                              ✕ Dismiss
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-white/50">
+                            Waiting for host approval
                           </div>
                         )}
                       </div>
@@ -849,8 +1103,8 @@ export default function RoomPage() {
                 No messages yet. Say hello!
               </p>
             ) : (
-              messages.map((msg, idx) => (
-                <div key={idx} className="text-xs sm:text-sm bg-white/5 rounded-2xl p-3 border border-white/5">
+              messages.map((msg) => (
+                <div key={msg.messageId} className="text-xs sm:text-sm bg-white/5 rounded-2xl p-3 border border-white/5">
                   <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="font-semibold text-purple-300 text-xs sm:text-sm">
                       {msg.isHost ? '🎤' : ''} {msg.username}
@@ -862,6 +1116,12 @@ export default function RoomPage() {
                   <p className="text-white/80 ml-4 break-words text-xs sm:text-sm">
                     {msg.message}
                   </p>
+                  <MessageReactions
+                    messageId={msg.messageId}
+                    reactions={messageReactions[msg.messageId] || {}}
+                    currentUserId={currentUserId}
+                    onReact={handleReactToMessage}
+                  />
                 </div>
               ))
             )}

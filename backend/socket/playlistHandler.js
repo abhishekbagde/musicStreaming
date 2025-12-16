@@ -335,4 +335,106 @@ export const playlistHandler = (io, socket, roomManager) => {
       playingFrom,
     })
   })
+
+  socket.on('song:reorder', (data) => {
+    const { roomId, fromIndex, toIndex } = data
+    const room = roomManager.getRoom(roomId)
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' })
+      return
+    }
+    if (!roomManager.canManageSongs(roomId, socket.id)) {
+      socket.emit('error', { message: 'Only host and co-hosts can reorder songs' })
+      return
+    }
+
+    const result = roomManager.moveSongInQueue(roomId, fromIndex, toIndex)
+    if (!result.success) {
+      socket.emit('error', { message: result.error || 'Unable to reorder songs' })
+      return
+    }
+
+    const playbackState = roomManager.getPlaybackState(roomId)
+    io.to(roomId).emit('playlist:update', {
+      queue: roomManager.getQueue(roomId),
+      currentSong: roomManager.getCurrentSong(roomId),
+      playing: playbackState.playing,
+      playingFrom: playbackState.playingFrom,
+    })
+  })
+
+  socket.on('song:request', (data) => {
+    const { roomId, song } = data
+    const room = roomManager.getRoom(roomId)
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' })
+      return
+    }
+    if (!song || !song.id) {
+      socket.emit('error', { message: 'Invalid song request' })
+      return
+    }
+    const session = roomManager.getUserSession(socket.id)
+    if (!session || session.roomId !== roomId) {
+      socket.emit('error', { message: 'Not in this room' })
+      return
+    }
+    const result = roomManager.addSongRequest(roomId, song, socket.id, session.username)
+    if (!result.success) {
+      socket.emit('error', { message: result.error || 'Failed to request song' })
+      return
+    }
+    io.to(roomId).emit('song:requests:update', {
+      requests: roomManager.getSongRequests(roomId),
+    })
+  })
+
+  socket.on('song:request:approve', (data) => {
+    const { roomId, requestId } = data
+    const room = roomManager.getRoom(roomId)
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' })
+      return
+    }
+    if (!roomManager.canManageSongs(roomId, socket.id)) {
+      socket.emit('error', { message: 'Only host and co-hosts can approve requests' })
+      return
+    }
+    const result = roomManager.approveSongRequest(roomId, requestId)
+    if (!result.success) {
+      socket.emit('error', { message: result.error || 'Failed to approve request' })
+      return
+    }
+    const playbackState = roomManager.getPlaybackState(roomId)
+    io.to(roomId).emit('song:requests:update', {
+      requests: roomManager.getSongRequests(roomId),
+    })
+    io.to(roomId).emit('playlist:update', {
+      queue: roomManager.getQueue(roomId),
+      currentSong: roomManager.getCurrentSong(roomId),
+      playing: playbackState.playing,
+      playingFrom: playbackState.playingFrom,
+    })
+  })
+
+  socket.on('song:request:reject', (data) => {
+    const { roomId, requestId } = data
+    const room = roomManager.getRoom(roomId)
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' })
+      return
+    }
+    if (!roomManager.canManageSongs(roomId, socket.id)) {
+      socket.emit('error', { message: 'Only host and co-hosts can reject requests' })
+      return
+    }
+    const result = roomManager.rejectSongRequest(roomId, requestId)
+    if (!result.success) {
+      socket.emit('error', { message: result.error || 'Failed to reject request' })
+      return
+    }
+    io.to(roomId).emit('song:requests:update', {
+      requests: roomManager.getSongRequests(roomId),
+    })
+  })
 }

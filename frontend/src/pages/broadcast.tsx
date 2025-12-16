@@ -3,6 +3,7 @@ import { socket } from '@/utils/socketClient'
 import { apiClient } from '@/utils/apiClient'
 import { loadYouTubeIframeAPI } from '@/utils/youtubeLoader'
 import { EmojiPickerButton } from '@/components/EmojiPickerButton'
+import { MessageReactions } from '@/components/MessageReactions'
 
 interface Song {
   id: string
@@ -13,7 +14,16 @@ interface Song {
   url: string
 }
 
+interface SongRequest {
+  id: string
+  song: Song
+  requestedBy: string
+  requestedByName: string
+  requestedAt: string
+}
+
 interface ChatMessage {
+  messageId: string
   userId: string
   username: string
   message: string
@@ -70,12 +80,14 @@ export default function BroadcastPage() {
   // --- Participants & Chat ---
   const [participants, setParticipants] = useState<Participant[]>([])
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messageReactions, setMessageReactions] = useState<Record<string, Record<string, string[]>>>({})
   const [messageInput, setMessageInput] = useState('')
 
   // --- Playlist & Search ---
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Song[]>([])
   const [queue, setQueue] = useState<Song[]>([])
+  const [songRequests, setSongRequests] = useState<SongRequest[]>([])
   const [currentSong, setCurrentSong] = useState<Song | null>(null)
 
   // --- UI State ---
@@ -90,6 +102,7 @@ export default function BroadcastPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messageInputRef = useRef<HTMLInputElement | null>(null)
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const dragSongIndexRef = useRef<number | null>(null)
   const playbackMetaRef = useRef<{ videoId: string | null; startedAt: number | null }>({
     videoId: null,
     startedAt: null,
@@ -110,6 +123,7 @@ export default function BroadcastPage() {
   const [playerReady, setPlayerReady] = useState(false)
   const pendingPlayerInitRef = useRef<Promise<void> | null>(null)
   const [playerInitAttempted, setPlayerInitAttempted] = useState(false)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
   const flushPendingPlayback = useCallback(() => {
     if (!playerReady || !playerRef.current) {
@@ -128,18 +142,28 @@ export default function BroadcastPage() {
     try {
       console.log('🎬 Starting playback via player', { videoId, startSeconds, audioConsent })
       
-      // Unmute BEFORE loading video for mobile compatibility
+      // Load the video first (Safari/Brave requirement)
+      playerRef.current.loadVideoById({ videoId, startSeconds })
+      
+      // Handle muting/unmuting for browser autoplay policies
       if (audioConsent) {
-        playerRef.current.unMute?.()
-        console.log('🔊 Unmuting player')
+        // Small delay for Safari compatibility
+        setTimeout(() => {
+          try {
+            playerRef.current?.unMute?.()
+            console.log('🔊 Unmuting player')
+          } catch (e) {
+            console.warn('Could not unmute:', e)
+          }
+        }, 100)
       } else {
         playerRef.current.mute?.()
         console.log('🔇 Muting player')
       }
       
-      // Load and play the video
-      playerRef.current.loadVideoById({ videoId, startSeconds })
+      // Play the video
       playerRef.current.playVideo?.()
+      console.log('▶️ Playing video')
     } catch (err) {
       console.error('Failed to start YouTube playback', err)
     }
@@ -149,6 +173,48 @@ export default function BroadcastPage() {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
+
+  const applyReactionUpdate = useCallback(
+    (messageId: string, emoji: string, userId: string, action: 'add' | 'remove') => {
+      if (!messageId || !emoji || !userId) return
+      setMessageReactions((prev) => {
+        const nextState = { ...prev }
+        const current = { ...(nextState[messageId] || {}) }
+        const existingUsers = current[emoji] || []
+        let updatedUsers = existingUsers
+        if (action === 'remove') {
+          updatedUsers = existingUsers.filter((id) => id !== userId)
+        } else if (!existingUsers.includes(userId)) {
+          updatedUsers = [...existingUsers, userId]
+        }
+        if (updatedUsers.length === 0) {
+          delete current[emoji]
+        } else {
+          current[emoji] = updatedUsers
+        }
+        if (Object.keys(current).length === 0) {
+          delete nextState[messageId]
+        } else {
+          nextState[messageId] = current
+        }
+        return nextState
+      })
+    },
+    []
+  )
+
+  const handleReactToMessage = useCallback(
+    (messageId: string, emoji: string, hasReacted: boolean) => {
+      if (!roomId || !emoji) return
+      const action = hasReacted ? 'remove' : 'add'
+      socket.emit('chat:reaction', { roomId, messageId, emoji, action })
+      const userId = socket.id
+      if (userId) {
+        applyReactionUpdate(messageId, emoji, userId, action)
+      }
+    },
+    [roomId, applyReactionUpdate]
+  )
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -301,8 +367,30 @@ export default function BroadcastPage() {
 
     // Chat events
     socket.on('chat:message', (data) => {
-      setMessages((prev) => [...prev, data])
+      const messageId =
+        typeof data.messageId === 'string' && data.messageId.length > 0
+          ? data.messageId
+          : `${data.userId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      setMessages((prev) => [...prev, { ...data, messageId }])
+      setMessageReactions((prev) => {
+        if (prev[messageId]) return prev
+        return { ...prev, [messageId]: {} }
+      })
       scrollToBottom()
+    })
+
+    socket.on('chat:reaction', (data) => {
+      if (!data?.messageId || !data?.emoji || !data?.userId) return
+      applyReactionUpdate(
+        data.messageId,
+        data.emoji,
+        data.userId,
+        data.action === 'remove' ? 'remove' : 'add'
+      )
+    })
+
+    socket.on('song:requests:update', (data) => {
+      setSongRequests(data.requests || [])
     })
 
     // Error events
@@ -337,11 +425,13 @@ export default function BroadcastPage() {
       socket.off('user:left')
       socket.off('playlist:update')
       socket.off('chat:message')
+      socket.off('chat:reaction')
+      socket.off('song:requests:update')
       socket.off('error')
       socket.off('user:promoted-cohost')
       socket.off('user:demoted-cohost')
     }
-  }, [flushPendingPlayback])
+  }, [flushPendingPlayback, applyReactionUpdate])
 
   // --- Detect if user is host / can manage songs ---
   useEffect(() => {
@@ -420,6 +510,9 @@ export default function BroadcastPage() {
             modestbranding: 1,
             playsinline: 1,
             mute: 1,
+            fs: 0,
+            iv_load_policy: 3,
+            enablejsapi: 1,
           },
           events: {
             onReady: () => {
@@ -582,6 +675,80 @@ export default function BroadcastPage() {
     console.log('🎯 Playing requested song:', songId)
   }
 
+  const reorderLocalQueue = useCallback((fromIndex: number, toIndex: number) => {
+    setQueue((prev) => {
+      const next = [...prev]
+      if (
+        fromIndex < 0 ||
+        fromIndex >= next.length ||
+        toIndex < 0 ||
+        toIndex >= next.length
+      ) {
+        return prev
+      }
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
+  }, [])
+
+  const handleQueueDragStart = useCallback(
+    (index: number) => (event: React.DragEvent<HTMLDivElement>) => {
+      if (!canManageSongs) return
+      dragSongIndexRef.current = index
+      setDragOverIndex(index)
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData('text/plain', String(index))
+    },
+    [canManageSongs]
+  )
+
+  const handleQueueDragOver = useCallback(
+    (index: number) => (event: React.DragEvent<HTMLDivElement>) => {
+      if (!canManageSongs) return
+      event.preventDefault()
+      if (dragOverIndex !== index) {
+        setDragOverIndex(index)
+      }
+    },
+    [canManageSongs, dragOverIndex]
+  )
+
+  const handleQueueDrop = useCallback(
+    (index: number) => (event: React.DragEvent<HTMLDivElement>) => {
+      if (!canManageSongs) return
+      event.preventDefault()
+      const fromIndex = dragSongIndexRef.current
+      setDragOverIndex(null)
+      dragSongIndexRef.current = null
+      if (fromIndex === null || fromIndex === index || !roomId) return
+      reorderLocalQueue(fromIndex, index)
+      socket.emit('song:reorder', { roomId, fromIndex, toIndex: index })
+    },
+    [canManageSongs, reorderLocalQueue, roomId]
+  )
+
+  const handleQueueDragEnd = useCallback(() => {
+    setDragOverIndex(null)
+    dragSongIndexRef.current = null
+  }, [])
+
+  const handleApproveRequest = useCallback(
+    (requestId: string) => {
+      if (!roomId) return
+      socket.emit('song:request:approve', { roomId, requestId })
+    },
+    [roomId]
+  )
+
+  const handleRejectRequest = useCallback(
+    (requestId: string) => {
+      if (!roomId) return
+      socket.emit('song:request:reject', { roomId, requestId })
+    },
+    [roomId]
+  )
+
   const handlePromoteCohost = (userId: string) => {
     if (!roomId || !isHost) return
     socket.emit('user:promote-cohost', { roomId, userId })
@@ -634,7 +801,7 @@ export default function BroadcastPage() {
   }
 
   const nowPlaying = currentSong || (queue.length > 0 ? queue[0] : null)
-  const currentUserId = socket.id || 'host'
+  const currentUserId = socket.id || null
   const hostParticipant = participants.find((p) => p.isHost)
   const hostDisplayName = hostParticipant?.username || hostName || 'Host'
   const roleLabelForParticipant = (participant: Participant) => {
@@ -859,13 +1026,21 @@ export default function BroadcastPage() {
                 <div className="space-y-2 sm:space-y-3 w-full">
                   {queue.map((song, idx) => {
                     const isCurrent = currentSong?.id === song.id
+                    const isDragTarget = canManageSongs && dragOverIndex === idx
                     return (
                       <div
                         key={song.id}
+                        draggable={canManageSongs}
+                        onDragStart={handleQueueDragStart(idx)}
+                        onDragOver={handleQueueDragOver(idx)}
+                        onDrop={handleQueueDrop(idx)}
+                        onDragEnd={handleQueueDragEnd}
                         className={`flex flex-col gap-3 p-3 rounded-2xl border transition-colors w-full ${
                           isCurrent
-                            ? 'bg-gradient-to-r from-purple-700/30 to-indigo-700/20 border-purple-400/40 shadow-lg'
+                            ? 'bg-gradient-to-r from-purple-700/30 to-indigo-700/20 border-purple-400/60 shadow-lg'
                             : 'bg-slate-900/40 border-white/5 hover:bg-slate-900/70'
+                        } ${isDragTarget ? 'border-dashed border-purple-300/80 bg-purple-950/30' : ''} ${
+                          canManageSongs ? 'cursor-grab' : ''
                         }`}
                       >
                         <div className="flex items-start gap-2 sm:gap-3 min-w-0 w-full">
@@ -909,6 +1084,58 @@ export default function BroadcastPage() {
                 </div>
               )}
             </div>
+
+            {canManageSongs && (
+              <div className="bg-slate-900/70 border border-yellow-200/10 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-lg sm:text-xl text-white">Song Requests ({songRequests.length})</h3>
+                  <span className="text-xs text-white/50">Approve or skip guest suggestions</span>
+                </div>
+                {songRequests.length === 0 ? (
+                  <div className="text-white/60 text-sm sm:text-base bg-white/5 rounded-2xl p-4 text-center border border-white/10">
+                    No pending requests. Guests can suggest tracks from their player view.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {songRequests.map((request) => (
+                      <div
+                        key={request.id}
+                        className="bg-white/5 border border-white/10 rounded-2xl p-3 sm:p-4 flex flex-col gap-2"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm sm:text-base font-semibold text-white line-clamp-1">
+                              {request.song.title}
+                            </div>
+                            <div className="text-xs text-white/60 line-clamp-1">{request.song.author}</div>
+                          </div>
+                          <span className="text-xs text-white/50">
+                            {new Date(request.requestedAt).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <div className="text-xs text-white/60">
+                          Requested by <span className="text-white">{request.requestedByName}</span>
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                          <button
+                            onClick={() => handleApproveRequest(request.id)}
+                            className="flex-1 min-w-[120px] bg-emerald-500/80 hover:bg-emerald-400 text-slate-950 font-semibold rounded-2xl px-3 py-2 text-sm transition"
+                          >
+                            ✅ Approve
+                          </button>
+                          <button
+                            onClick={() => handleRejectRequest(request.id)}
+                            className="flex-1 min-w-[120px] bg-red-500/60 hover:bg-red-500 text-white font-semibold rounded-2xl px-3 py-2 text-sm transition"
+                          >
+                            ✕ Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           {/* Room Info */}
           <div className="bg-slate-900/70 border border-white/5 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6 space-y-4">
@@ -941,14 +1168,17 @@ export default function BroadcastPage() {
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <span>
-                          {p.isHost ? '🎤' : p.role === 'cohost' ? '⭐' : '👥'}
-                        </span>
-                        <span className="truncate">{p.username}</span>
-                        {p.role === 'cohost' && (
-                          <span className="text-xs bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded whitespace-nowrap">
-                            Co-Host
-                          </span>
-                        )}
+                      {p.isHost ? '🎤' : p.role === 'cohost' ? '⭐' : '👥'}
+                    </span>
+                    <span className="truncate">{p.username}</span>
+                    <span className="text-[11px] text-white/50 whitespace-nowrap">
+                      ({roleLabelForParticipant(p)})
+                    </span>
+                    {p.role === 'cohost' && (
+                      <span className="text-xs bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded whitespace-nowrap">
+                        Co-Host
+                      </span>
+                    )}
                       </div>
                       {isHost && !p.isHost && (
                         <div className="flex gap-1 flex-shrink-0">
@@ -985,27 +1215,33 @@ export default function BroadcastPage() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-1 sm:pr-2 max-h-[280px] sm:max-h-[360px] lg:max-h-none">
-            {messages.length === 0 ? (
-              <p className="text-white/50 text-center text-xs sm:text-sm">
-                No messages yet. Start chatting!
-              </p>
-            ) : (
-              messages.map((msg, idx) => (
-                <div key={idx} className="text-xs sm:text-sm bg-white/5 rounded-2xl p-3 border border-white/5">
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="font-semibold text-purple-300 text-xs sm:text-sm">
-                      {msg.isHost ? '🎤' : ''} {msg.username}
-                    </span>
-                    <span className="text-xs text-white/50">
-                      {new Date(msg.timestamp).toLocaleTimeString()}
-                    </span>
+              {messages.length === 0 ? (
+                <p className="text-white/50 text-center text-xs sm:text-sm">
+                  No messages yet. Start chatting!
+                </p>
+              ) : (
+                messages.map((msg) => (
+                  <div key={msg.messageId} className="text-xs sm:text-sm bg-white/5 rounded-2xl p-3 border border-white/5">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="font-semibold text-purple-300 text-xs sm:text-sm">
+                        {msg.isHost ? '🎤' : ''} {msg.username}
+                      </span>
+                      <span className="text-xs text-white/50">
+                        {new Date(msg.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <p className="text-white/80 ml-4 break-words text-xs sm:text-sm">
+                      {msg.message}
+                    </p>
+                    <MessageReactions
+                      messageId={msg.messageId}
+                      reactions={messageReactions[msg.messageId] || {}}
+                      currentUserId={currentUserId}
+                      onReact={handleReactToMessage}
+                    />
                   </div>
-                  <p className="text-white/80 ml-4 break-words text-xs sm:text-sm">
-                    {msg.message}
-                  </p>
-                </div>
-              ))
-            )}
+                ))
+              )}
             <div ref={messagesEndRef} />
           </div>
 

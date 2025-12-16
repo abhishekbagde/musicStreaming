@@ -50,6 +50,10 @@ export function roomHandler(io, socket, roomManager) {
         ...roomManager.getPlaybackState(room.roomId),
       })
 
+      socket.emit('song:requests:update', {
+        requests: roomManager.getSongRequests(room.roomId),
+      })
+
       console.log(`Room created: ${room.roomId} by ${userId} (${room.hostName})`)
     } catch (error) {
       console.error('Error creating room:', error)
@@ -105,6 +109,10 @@ export function roomHandler(io, socket, roomManager) {
         queue: roomManager.getQueue(roomId),
         currentSong: roomManager.getCurrentSong(roomId),
         ...roomManager.getPlaybackState(roomId),
+      })
+
+      socket.emit('song:requests:update', {
+        requests: roomManager.getSongRequests(roomId),
       })
 
       console.log(`User ${userId} joined room ${roomId}`)
@@ -226,6 +234,10 @@ export function roomHandler(io, socket, roomManager) {
         queue: roomManager.getQueue(roomId),
         currentSong: roomManager.getCurrentSong(roomId),
         ...roomManager.getPlaybackState(roomId),
+      })
+
+      socket.emit('song:requests:update', {
+        requests: roomManager.getSongRequests(roomId),
       })
 
       console.log(`User ${socket.id} rejoined room ${roomId}`)

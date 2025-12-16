@@ -1,3 +1,5 @@
+import { v4 as uuidv4 } from 'uuid'
+
 class RoomManager {
   constructor() {
     this.rooms = {}
@@ -36,6 +38,7 @@ class RoomManager {
       isPlaying: false,
       playingFrom: null,
       resumeMs: 0,
+      requests: [],
     }
     this.rooms[roomId] = room
     this.userSessions[hostId] = { roomId, isHost: true, username: safeHostName }
@@ -169,6 +172,86 @@ class RoomManager {
     return { success: true, song, index }
   }
 
+  moveSongInQueue(roomId, fromIndex, toIndex) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    const queue = room.queue
+    if (
+      typeof fromIndex !== 'number' ||
+      typeof toIndex !== 'number' ||
+      fromIndex < 0 ||
+      fromIndex >= queue.length ||
+      toIndex < 0 ||
+      toIndex >= queue.length ||
+      fromIndex === toIndex
+    ) {
+      return { success: false, error: 'Invalid indices' }
+    }
+
+    const [song] = queue.splice(fromIndex, 1)
+    queue.splice(toIndex, 0, song)
+
+    if (room.currentSongIndex === fromIndex) {
+      room.currentSongIndex = toIndex
+    } else if (room.currentSongIndex > fromIndex && room.currentSongIndex <= toIndex) {
+      room.currentSongIndex -= 1
+    } else if (room.currentSongIndex < fromIndex && room.currentSongIndex >= toIndex) {
+      room.currentSongIndex += 1
+    }
+
+    if (room.currentSongIndex >= 0 && room.currentSongIndex < queue.length) {
+      room.currentSong = queue[room.currentSongIndex]
+    }
+
+    return { success: true, queue }
+  }
+
+  addSongRequest(roomId, song, userId, username) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    if (!song || !song.id) return { success: false, error: 'Invalid song data' }
+    const request = {
+      id: uuidv4(),
+      song,
+      requestedBy: userId,
+      requestedByName: username || 'Guest',
+      requestedAt: new Date().toISOString(),
+    }
+    room.requests.push(request)
+    return { success: true, request, requests: room.requests }
+  }
+
+  approveSongRequest(roomId, requestId) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    const index = room.requests.findIndex((req) => req.id === requestId)
+    if (index === -1) return { success: false, error: 'Request not found' }
+    const [request] = room.requests.splice(index, 1)
+    this.addSongToQueue(roomId, request.song)
+    return { success: true, request, requests: room.requests }
+  }
+
+  rejectSongRequest(roomId, requestId) {
+    const room = this.rooms[roomId]
+    if (!room) return { success: false, error: 'Room not found' }
+    const index = room.requests.findIndex((req) => req.id === requestId)
+    if (index === -1) return { success: false, error: 'Request not found' }
+    const [request] = room.requests.splice(index, 1)
+    return { success: true, request, requests: room.requests }
+  }
+
+  clearRequestsByUser(roomId, userId) {
+    const room = this.rooms[roomId]
+    if (!room || !room.requests) return
+    room.requests = room.requests.filter((req) => req.requestedBy !== userId)
+  }
+
+  getSongRequests(roomId) {
+    const room = this.rooms[roomId]
+    if (!room) return []
+    return room.requests || []
+  }
+
   joinRoom(roomId, userId, username) {
     const room = this.rooms[roomId]
     if (!room) {
@@ -209,6 +292,9 @@ class RoomManager {
 
     room.participants = room.participants.filter((id) => id !== userId)
     delete this.userSessions[userId]
+    if (room.requests && room.requests.length > 0) {
+      this.clearRequestsByUser(roomId, userId)
+    }
 
     // If host leaves, close room
     if (room.hostId === userId) {
