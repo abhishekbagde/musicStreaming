@@ -203,7 +203,7 @@ export function roomHandler(io, socket, roomManager) {
 
       const room = roomManager.getRoom(roomId)
       if (!room) {
-        socket.emit('error', { message: 'Room not found' })
+        socket.emit('room:closed', { message: 'This room has been closed by the host' })
         return
       }
 

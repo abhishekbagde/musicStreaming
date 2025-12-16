@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { socket } from '@/utils/socketClient'
 import { apiClient } from '@/utils/apiClient'
 import { loadYouTubeIframeAPI } from '@/utils/youtubeLoader'
@@ -271,6 +272,10 @@ export default function BroadcastPage() {
     // Room events
     socket.on('room:created', (data) => {
       setRoomId(data.roomId)
+      // Store roomId in sessionStorage for recovery if host refreshes
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('musicstreaming_host_roomId', data.roomId)
+      }
       setError('')
       console.log('✅ Room created:', data.roomId)
       const initialHostName =
@@ -284,6 +289,15 @@ export default function BroadcastPage() {
           role: 'host',
         }),
       ])
+    })
+
+    // Handle host successfully rejoining their room after reconnection
+    socket.on('room:rejoined', (data) => {
+      if (data.success) {
+        setRoomId(data.roomId)
+        setError('')
+        console.log('✅ Host rejoined room:', data.roomId)
+      }
     })
 
     // Participants events
@@ -420,6 +434,7 @@ export default function BroadcastPage() {
 
     return () => {
       socket.off('room:created')
+      socket.off('room:rejoined')
       socket.off('participants:list')
       socket.off('user:joined')
       socket.off('user:left')
@@ -441,6 +456,17 @@ export default function BroadcastPage() {
     setIsHost(hostFlag)
     setCanManageSongs(!!me && (me.isHost || me.role === 'cohost'))
   }, [participants])
+
+  // --- Auto-rejoin host's previous room on mount if connection was lost ---
+  useEffect(() => {
+    if (typeof window === 'undefined' || roomId) return // Already in a room
+    
+    const storedRoomId = sessionStorage.getItem('musicstreaming_host_roomId')
+    if (storedRoomId) {
+      console.log('🔄 Host recovering previous room:', storedRoomId)
+      socket.emit('room:rejoin', { roomId: storedRoomId })
+    }
+  }, [roomId])
 
   useEffect(() => {
     latestRoomMetaRef.current = { roomId, isHost }
@@ -871,6 +897,16 @@ export default function BroadcastPage() {
         className="absolute w-[1px] h-[1px] opacity-0 pointer-events-none overflow-hidden"
         aria-hidden="true"
       />
+
+      {/* Back Button */}
+      <div className="fixed top-4 left-4 z-50">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-white/70 hover:text-white transition text-sm sm:text-base font-semibold"
+        >
+          ← Back to Home
+        </Link>
+      </div>
 
       {/* Connection Status Indicator */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold backdrop-blur">
