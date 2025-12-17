@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
+import Image from 'next/image'
 import { socket } from '@/utils/socketClient'
 import { EmojiPickerButton } from '@/components/EmojiPickerButton'
 import { MessageReactions } from '@/components/MessageReactions'
@@ -190,6 +191,7 @@ export default function RoomPage() {
     flushPendingPlayback()
     setIsPlaying(true)
   }, [audioConsent, flushPendingPlayback])
+  const queuePlaybackRef = useRef(queuePlayback)
 
   const enableAudio = useCallback(async () => {
     if (audioConsent) return
@@ -262,6 +264,7 @@ export default function RoomPage() {
     },
     []
   )
+  const applyReactionUpdateRef = useRef(applyReactionUpdate)
 
   const handleReactToMessage = useCallback(
     (messageId: string, emoji: string, hasReacted: boolean) => {
@@ -275,6 +278,14 @@ export default function RoomPage() {
     },
     [currentRoomId, applyReactionUpdate]
   )
+
+  useEffect(() => {
+    queuePlaybackRef.current = queuePlayback
+  }, [queuePlayback])
+
+  useEffect(() => {
+    applyReactionUpdateRef.current = applyReactionUpdate
+  }, [applyReactionUpdate])
 
   // --- Socket.io Listeners ---
   useEffect(() => {
@@ -382,7 +393,7 @@ export default function RoomPage() {
 
       if (typeof data.playing === 'boolean') {
         if (data.playing && data.currentSong) {
-          queuePlayback(data.currentSong, data.playingFrom)
+          queuePlaybackRef.current?.(data.currentSong, data.playingFrom)
         } else {
           playbackRequestRef.current = null
           playbackMetaRef.current = { videoId: null, startedAt: null }
@@ -421,12 +432,8 @@ export default function RoomPage() {
 
     socket.on('chat:reaction', (data) => {
       if (!data?.messageId || !data?.emoji || !data?.userId) return
-      applyReactionUpdate(
-        data.messageId,
-        data.emoji,
-        data.userId,
-        data.action === 'remove' ? 'remove' : 'add'
-      )
+      const action = data.action === 'remove' ? 'remove' : 'add'
+      applyReactionUpdateRef.current?.(data.messageId, data.emoji, data.userId, action)
     })
 
     socket.on('song:requests:update', (data) => {
@@ -475,9 +482,15 @@ export default function RoomPage() {
       socket.off('room:closed')
       socket.off('user:promoted-cohost')
       socket.off('user:demoted-cohost')
+    }
+  }, [currentRoomId, router])
+
+  useEffect(() => {
+    if (!currentRoomId) return
+    return () => {
       socket.emit('room:leave')
     }
-  }, [queuePlayback, currentRoomId, router, applyReactionUpdate])
+  }, [currentRoomId])
 
   useEffect(() => {
     if (audioConsent) return
@@ -879,9 +892,11 @@ export default function RoomPage() {
                       <div className="flex flex-col gap-3">
                         <div className="flex items-start gap-3 min-w-0">
                           {song.thumbnail && (
-                            <img
+                            <Image
                               src={song.thumbnail}
                               alt={`${song.title} thumbnail`}
+                              width={64}
+                              height={64}
                               className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover flex-shrink-0"
                             />
                           )}

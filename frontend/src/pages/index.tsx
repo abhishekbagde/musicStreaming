@@ -79,7 +79,7 @@ export default function Home() {
                 <div className="flex-shrink-0 w-8 h-8 bg-white text-purple-700 rounded-full flex items-center justify-center font-bold text-sm">1</div>
                 <div>
                   <h4 className="text-white font-bold text-sm sm:text-base">Create a Room</h4>
-                  <p className="text-purple-100 text-xs sm:text-sm">Click "Start Broadcasting" and enter your display name to create your room</p>
+                  <p className="text-purple-100 text-xs sm:text-sm">Click &ldquo;Start Broadcasting&rdquo; and enter your display name to create your room</p>
                 </div>
               </div>
 

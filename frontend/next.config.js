@@ -22,6 +22,14 @@ const nextConfig = {
       ],
     },
   ],
+  images: {
+    domains: ['i.ytimg.com', 'img.youtube.com', 'yt3.ggpht.com'],
+  },
+  webpack: (config) => {
+    // Disable webpack's filesystem cache to prevent ENOENT errors when .next/cache is pruned
+    config.cache = false
+    return config
+  },
 }
 
 module.exports = nextConfig

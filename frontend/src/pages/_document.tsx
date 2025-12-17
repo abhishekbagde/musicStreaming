@@ -8,7 +8,6 @@ export default function Document(): ReactElement {
         {/* Favicon - Music Note Emoji */}
         <link rel="icon" href="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='75' text-anchor='middle' font-size='75'%3E🎵%3C/text%3E%3C/svg%3E" />
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#0f172a" />
       </Head>
       <body>

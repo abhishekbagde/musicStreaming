@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { socket } from '@/utils/socketClient'
 import { apiClient } from '@/utils/apiClient'
 import { loadYouTubeIframeAPI } from '@/utils/youtubeLoader'
@@ -125,6 +126,8 @@ export default function BroadcastPage() {
   const pendingPlayerInitRef = useRef<Promise<void> | null>(null)
   const [playerInitAttempted, setPlayerInitAttempted] = useState(false)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const audioConsentRef = useRef(audioConsent)
+  const playerReadyRef = useRef(playerReady)
 
   const flushPendingPlayback = useCallback(() => {
     if (!playerReady || !playerRef.current) {
@@ -234,6 +237,14 @@ export default function BroadcastPage() {
     }
   }, [hostName])
 
+  useEffect(() => {
+    audioConsentRef.current = audioConsent
+  }, [audioConsent])
+
+  useEffect(() => {
+    playerReadyRef.current = playerReady
+  }, [playerReady])
+
   // --- Socket.io Listeners ---
   useEffect(() => {
     // Connection status monitoring
@@ -259,8 +270,9 @@ export default function BroadcastPage() {
       setConnectionStatus('connected')
       setError('')
       // Re-join room after reconnection
-      if (roomId) {
-        socket.emit('room:rejoin', { roomId })
+      const activeRoomId = latestRoomMetaRef.current.roomId
+      if (activeRoomId) {
+        socket.emit('room:rejoin', { roomId: activeRoomId })
       }
     })
 
@@ -333,15 +345,17 @@ export default function BroadcastPage() {
 
     // Playlist events
     socket.on('playlist:update', (data) => {
+      const latestConsent = audioConsentRef.current
+      const latestPlayerReady = playerReadyRef.current
       setQueue(data.queue || [])
       setCurrentSong(data.currentSong || null)
-    console.log('🎵 Queue updated:', data.queue?.length || 0, {
-      playingFlag: data.playing,
-      currentSongId: data.currentSong?.id,
-      consent: audioConsent,
-      playerReady,
-      hasPlayer: !!playerRef.current,
-    })
+      console.log('🎵 Queue updated:', data.queue?.length || 0, {
+        playingFlag: data.playing,
+        currentSongId: data.currentSong?.id,
+        consent: latestConsent,
+        playerReady: latestPlayerReady,
+        hasPlayer: !!playerRef.current,
+      })
 
       if (typeof data.playing === 'boolean') {
         if (data.playing && data.currentSong) {
@@ -359,8 +373,8 @@ export default function BroadcastPage() {
             console.log('🎬 Received playback request', {
               videoId,
               startSeconds,
-              audioConsent,
-              playerReady,
+              audioConsent: latestConsent,
+              playerReady: latestPlayerReady,
               hasPlayer: !!playerRef.current,
             })
             flushPendingPlayback()
@@ -993,9 +1007,11 @@ export default function BroadcastPage() {
                       <div className="flex flex-col gap-3 w-full">
                         <div className="flex items-start gap-3 min-w-0 w-full">
                           {song.thumbnail && (
-                            <img
+                            <Image
                               src={song.thumbnail}
                               alt={`${song.title} thumbnail`}
+                              width={64}
+                              height={64}
                               className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover flex-shrink-0"
                             />
                           )}
