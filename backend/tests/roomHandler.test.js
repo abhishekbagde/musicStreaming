@@ -149,14 +149,14 @@ describe('roomHandler socket events', () => {
     const payload = { roomId: 'room-1', userId: 'socket-2' }
 
     it('requires host privileges', async () => {
-      roomManager.isHostOfRoom.mockReturnValue(false)
+      roomManager.getRoom.mockReturnValue({ hostId: 'socket-99', cohosts: [] })
       await trigger('user:promote-cohost', payload)
       expect(socket.emit).toHaveBeenCalledWith('error', { message: 'Only the host can promote users' })
       expect(roomManager.promoteCohost).not.toHaveBeenCalled()
     })
 
     it('promotes user and emits event', async () => {
-      roomManager.isHostOfRoom.mockReturnValue(true)
+      roomManager.getRoom.mockReturnValue({ hostId: 'socket-1', cohosts: [] })
       roomManager.promoteCohost.mockReturnValue({ success: true })
       roomManager.getUserSession.mockReturnValue({ username: 'Guest' })
 
@@ -172,13 +172,13 @@ describe('roomHandler socket events', () => {
     const payload = { roomId: 'room-1', userId: 'socket-2' }
 
     it('demotes only when host', async () => {
-      roomManager.isHostOfRoom.mockReturnValue(false)
+      roomManager.getRoom.mockReturnValue({ hostId: 'socket-99', cohosts: ['socket-2'] })
       await trigger('user:demote-cohost', payload)
       expect(socket.emit).toHaveBeenCalledWith('error', { message: 'Only the host can demote users' })
     })
 
     it('demotes user and emits event', async () => {
-      roomManager.isHostOfRoom.mockReturnValue(true)
+      roomManager.getRoom.mockReturnValue({ hostId: 'socket-1', cohosts: ['socket-2'] })
       roomManager.demoteCohost.mockReturnValue({ success: true })
       roomManager.getUserSession.mockReturnValue({ username: 'Guest' })
 

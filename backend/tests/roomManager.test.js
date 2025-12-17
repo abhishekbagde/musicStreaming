@@ -103,4 +103,100 @@ describe('RoomManager', () => {
     expect(manager.playNextSong(fakeRoom).success).toBe(false)
     expect(manager.moveSongInQueue(fakeRoom, 0, 1).success).toBe(false)
   })
+
+  describe('Co-host promotion and room ownership', () => {
+    it('promotes co-host to host when host leaves with co-hosts present', () => {
+      // Create room with host and guests
+      manager.joinRoom(room.roomId, 'guest-1', 'Guest One')
+      manager.joinRoom(room.roomId, 'guest-2', 'Guest Two')
+
+      // Promote guest-1 to co-host
+      const promoteResult = manager.promoteCohost(room.roomId, 'guest-1')
+      expect(promoteResult.success).toBe(true)
+
+      // Verify guest-1 is a co-host
+      let roomData = manager.getRoom(room.roomId)
+      expect(roomData.cohosts).toContain('guest-1')
+
+      // Host leaves
+      const leaveResult = manager.leaveRoom('host-1')
+      expect(leaveResult.hostChanged).toBe(true)
+      expect(leaveResult.newHostId).toBe('guest-1')
+      expect(leaveResult.closed).toBe(false)
+
+      // Verify co-host is now host
+      roomData = manager.getRoom(room.roomId)
+      expect(roomData.hostId).toBe('guest-1')
+      expect(roomData.cohosts).not.toContain('guest-1')
+      expect(roomData.participants).toContain('guest-1')
+    })
+
+    it('closes room when host leaves with no co-hosts', () => {
+      // Create room with host and guest (no co-hosts)
+      manager.joinRoom(room.roomId, 'guest-1', 'Guest One')
+
+      // Host leaves (no co-hosts to promote)
+      const leaveResult = manager.leaveRoom('host-1')
+      expect(leaveResult.closed).toBe(true)
+      expect(leaveResult.hostChanged).toBeUndefined()
+
+      // Verify room is deleted
+      const roomData = manager.getRoom(room.roomId)
+      expect(roomData).toBeUndefined()
+    })
+
+    it('does not close room when guest leaves', () => {
+      // Create room with host and guest
+      manager.joinRoom(room.roomId, 'guest-1', 'Guest One')
+
+      // Guest leaves
+      const leaveResult = manager.leaveRoom('guest-1')
+      expect(leaveResult.closed).toBe(false)
+      expect(leaveResult.hostChanged).toBeUndefined()
+
+      // Verify room still exists
+      const roomData = manager.getRoom(room.roomId)
+      expect(roomData).toBeDefined()
+      expect(roomData.hostId).toBe('host-1')
+      expect(roomData.participants).not.toContain('guest-1')
+    })
+
+    it('handles multiple co-hosts - promotes first one', () => {
+      // Create room with multiple guests
+      manager.joinRoom(room.roomId, 'guest-1', 'Guest One')
+      manager.joinRoom(room.roomId, 'guest-2', 'Guest Two')
+      manager.joinRoom(room.roomId, 'guest-3', 'Guest Three')
+
+      // Promote two guests to co-hosts
+      manager.promoteCohost(room.roomId, 'guest-1')
+      manager.promoteCohost(room.roomId, 'guest-2')
+
+      // Host leaves
+      const leaveResult = manager.leaveRoom('host-1')
+      expect(leaveResult.hostChanged).toBe(true)
+      expect(leaveResult.newHostId).toBe('guest-1') // First promoted co-host
+
+      // Verify guest-1 is now host, guest-2 is still co-host
+      const roomData = manager.getRoom(room.roomId)
+      expect(roomData.hostId).toBe('guest-1')
+      expect(roomData.cohosts).toContain('guest-2')
+      expect(roomData.cohosts).not.toContain('guest-1')
+    })
+
+    it('updates user session when promoted to host', () => {
+      // Create room with guest
+      manager.joinRoom(room.roomId, 'guest-1', 'Guest One')
+
+      // Promote to co-host
+      manager.promoteCohost(room.roomId, 'guest-1')
+
+      // Host leaves
+      manager.leaveRoom('host-1')
+
+      // Verify user session reflects host status
+      const guestSession = manager.getUserSession('guest-1')
+      expect(guestSession.isHost).toBe(true)
+    })
+  })
 })
+
