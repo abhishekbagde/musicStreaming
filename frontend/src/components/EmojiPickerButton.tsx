@@ -14,30 +14,9 @@ interface EmojiPickerButtonProps {
   disabled?: boolean
 }
 
-const RECENT_STORAGE_KEY = 'musicstreaming_recent_emojis'
-const MAX_RECENT_EMOJIS = 12
-
 export function EmojiPickerButton({ onEmojiSelect, disabled }: EmojiPickerButtonProps) {
   const [open, setOpen] = useState(false)
-  const [recentEmojis, setRecentEmojis] = useState<string[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-    try {
-      const stored = window.localStorage.getItem(RECENT_STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed)) {
-          setRecentEmojis(parsed.filter((item) => typeof item === 'string'))
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load recent emojis', error)
-    }
-  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -53,20 +32,9 @@ export function EmojiPickerButton({ onEmojiSelect, disabled }: EmojiPickerButton
     }
   }, [open])
 
-  const updateRecentEmojis = (emoji: string) => {
-    setRecentEmojis((prev) => {
-      const next = [emoji, ...prev.filter((item) => item !== emoji)].slice(0, MAX_RECENT_EMOJIS)
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(next))
-      }
-      return next
-    })
-  }
-
   const emitEmoji = (emoji: string) => {
     if (!emoji) return
     onEmojiSelect(emoji)
-    updateRecentEmojis(emoji)
     setOpen(false)
   }
 
@@ -93,20 +61,6 @@ export function EmojiPickerButton({ onEmojiSelect, disabled }: EmojiPickerButton
       </button>
       {open && (
         <div className="absolute bottom-full right-0 mb-2 z-50 w-72 rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur">
-          {recentEmojis.length > 0 && (
-            <div className="flex flex-wrap gap-1 px-3 py-2 border-b border-white/10">
-              {recentEmojis.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={() => emitEmoji(emoji)}
-                  className="text-xl px-2 py-1 rounded-xl hover:bg-white/10 focus:bg-white/20 focus:outline-none"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
           <div className="p-2">
             <EmojiPicker
               data={data}

@@ -430,4 +430,5 @@ class RoomManager {
   }
 }
 
+export default RoomManager
 export const roomManager = new RoomManager()
