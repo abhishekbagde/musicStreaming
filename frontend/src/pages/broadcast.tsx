@@ -4,8 +4,10 @@ import Image from 'next/image'
 import { socket } from '@/utils/socketClient'
 import { apiClient } from '@/utils/apiClient'
 import { loadYouTubeIframeAPI } from '@/utils/youtubeLoader'
+import { useHeartbeat } from '@/hooks/useHeartbeat'
 import { EmojiPickerButton } from '@/components/EmojiPickerButton'
 import { MessageReactions } from '@/components/MessageReactions'
+import { reorderList } from '@/utils/queueUtils'
 
 interface Song {
   id: string
@@ -103,7 +105,6 @@ export default function BroadcastPage() {
   // --- Refs ---
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messageInputRef = useRef<HTMLInputElement | null>(null)
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const dragSongIndexRef = useRef<number | null>(null)
   const playbackMetaRef = useRef<{ videoId: string | null; startedAt: number | null }>({
     videoId: null,
@@ -501,32 +502,7 @@ export default function BroadcastPage() {
     latestRoomMetaRef.current = { roomId, isHost }
   }, [roomId, isHost])
 
-  // --- Heartbeat to keep connection alive while playing ---
-  useEffect(() => {
-    if (!isPlaying || !roomId) {
-      // Clear heartbeat when not playing
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current)
-        heartbeatIntervalRef.current = null
-      }
-      return
-    }
-
-    // Send heartbeat every 25 seconds while song is playing
-    heartbeatIntervalRef.current = setInterval(() => {
-      if (roomId) {
-        socket.emit('heartbeat', { roomId })
-        console.log('💓 Heartbeat sent to keep connection alive')
-      }
-    }, 25000)
-
-    return () => {
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current)
-        heartbeatIntervalRef.current = null
-      }
-    }
-  }, [isPlaying, roomId])
+  useHeartbeat({ isPlaying, roomId, socket, role: 'host' })
 
   useEffect(() => {
     if (audioConsent && playerReady && playbackRequestRef.current && playerRef.current) {
@@ -731,20 +707,7 @@ export default function BroadcastPage() {
   }
 
   const reorderLocalQueue = useCallback((fromIndex: number, toIndex: number) => {
-    setQueue((prev) => {
-      const next = [...prev]
-      if (
-        fromIndex < 0 ||
-        fromIndex >= next.length ||
-        toIndex < 0 ||
-        toIndex >= next.length
-      ) {
-        return prev
-      }
-      const [moved] = next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, moved)
-      return next
-    })
+    setQueue((prev) => reorderList(prev, fromIndex, toIndex))
   }, [])
 
   const handleQueueDragStart = useCallback(
@@ -1143,7 +1106,7 @@ export default function BroadcastPage() {
             </div>
 
             {canManageSongs && (
-              <div className="bg-slate-900/70 border border-yellow-200/10 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6">
+              <div className="bg-slate-900/70 border border-yellow-200/10 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6 mt-6">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-bold text-lg sm:text-xl text-white">Song Requests ({songRequests.length})</h3>
                   <span className="text-xs text-white/50">Approve or skip guest suggestions</span>

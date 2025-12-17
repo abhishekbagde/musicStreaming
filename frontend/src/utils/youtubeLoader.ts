@@ -8,8 +8,12 @@ declare global {
 
 const YOUTUBE_SCRIPT_ID = 'youtube-iframe-api'
 
+export const browserEnv = {
+  isBrowser: () => typeof window !== 'undefined',
+}
+
 export const loadYouTubeIframeAPI = (): Promise<void> => {
-  if (typeof window === 'undefined') {
+  if (!browserEnv.isBrowser()) {
     return Promise.reject(new Error('YouTube API unavailable on server'))
   }
 

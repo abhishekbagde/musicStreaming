@@ -3,10 +3,12 @@ import { useRouter } from 'next/router'
 import Link from 'next/link'
 import Image from 'next/image'
 import { socket } from '@/utils/socketClient'
+import { useHeartbeat } from '@/hooks/useHeartbeat'
 import { EmojiPickerButton } from '@/components/EmojiPickerButton'
 import { MessageReactions } from '@/components/MessageReactions'
 import { apiClient } from '@/utils/apiClient'
 import { loadYouTubeIframeAPI } from '@/utils/youtubeLoader'
+import { reorderList } from '@/utils/queueUtils'
 
 interface Song {
   id: string
@@ -102,7 +104,6 @@ export default function RoomPage() {
   // --- Player state ---
   const [audioConsent, setAudioConsent] = useState(false)
   const [audioConsentNeeded, setAudioConsentNeeded] = useState(false)
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const pendingPlaybackOnConsentRef = useRef<{ song: Song; startedAt: number } | null>(null)
   const playbackRequestRef = useRef<{ videoId: string; startSeconds: number; startedAt: number } | null>(null)
   const playbackMetaRef = useRef<{ videoId: string | null; startedAt: number | null }>({
@@ -510,32 +511,12 @@ export default function RoomPage() {
     }
   }, [audioConsent, enableAudio])
 
-  // --- Heartbeat to keep connection alive while playing ---
-  useEffect(() => {
-    if (!isPlaying || !currentRoomId) {
-      // Clear heartbeat when not playing
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current)
-        heartbeatIntervalRef.current = null
-      }
-      return
-    }
-
-    // Send heartbeat every 25 seconds while song is playing
-    heartbeatIntervalRef.current = setInterval(() => {
-      if (currentRoomId) {
-        socket.emit('heartbeat', { roomId: currentRoomId })
-        console.log('💓 [guest] Heartbeat sent to keep connection alive')
-      }
-    }, 25000)
-
-    return () => {
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current)
-        heartbeatIntervalRef.current = null
-      }
-    }
-  }, [isPlaying, currentRoomId])
+  useHeartbeat({
+    isPlaying,
+    roomId: currentRoomId,
+    socket,
+    role: 'guest',
+  })
 
   useEffect(() => {
     flushPendingPlayback()
@@ -653,21 +634,7 @@ export default function RoomPage() {
   }
 
   const reorderLocalQueue = useCallback((fromIndex: number, toIndex: number) => {
-    setQueue((prev) => {
-      const next = [...prev]
-      if (
-        fromIndex < 0 ||
-        fromIndex >= next.length ||
-        toIndex < 0 ||
-        toIndex >= next.length ||
-        fromIndex === toIndex
-      ) {
-        return prev
-      }
-      const [moved] = next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, moved)
-      return next
-    })
+    setQueue((prev) => reorderList(prev, fromIndex, toIndex))
   }, [])
 
   const handleQueueDragStart = useCallback(
@@ -1036,7 +1003,7 @@ export default function RoomPage() {
               )}
             </div>
 
-            <div className="bg-slate-900/70 border border-yellow-200/10 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6">
+            <div className="bg-slate-900/70 border border-yellow-200/10 rounded-3xl shadow-2xl p-4 sm:p-5 lg:p-6 mt-6">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-bold text-lg sm:text-xl text-white">Song Requests ({songRequests.length})</h3>
                 {canManageSongs ? (
