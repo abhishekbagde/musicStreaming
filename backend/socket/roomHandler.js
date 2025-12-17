@@ -140,8 +140,35 @@ export function roomHandler(io, socket, roomManager) {
       socket.leave(roomId)
 
       if (result.closed) {
-        // Room closed because host left
+        // Room closed because host left and no co-hosts
         io.to(roomId).emit('room:closed', { message: 'Host closed the room' })
+      } else if (result.hostChanged) {
+        // Host was promoted from co-hosts
+        const newHostSession = roomManager.getUserSession(result.newHostId)
+        const newHostName = newHostSession?.username || 'New Host'
+        
+        io.to(roomId).emit('user:left', {
+          userId: socket.id,
+          participantCount: roomManager.getRoom(roomId)?.participants.length || 0,
+        })
+
+        // Emit system message about user leaving
+        io.to(roomId).emit('system:message', {
+          message: `👋 ${username} left the room`,
+          timestamp: new Date().toISOString(),
+        })
+
+        // Emit system message about host change
+        io.to(roomId).emit('system:message', {
+          message: `👑 ${newHostName} is now the host`,
+          timestamp: new Date().toISOString(),
+        })
+
+        // Notify all users about the new host
+        io.to(roomId).emit('host:changed', {
+          newHostId: result.newHostId,
+          newHostName,
+        })
       } else {
         // Just update participant list
         const room = roomManager.getRoom(roomId)
@@ -264,15 +291,22 @@ export function roomHandler(io, socket, roomManager) {
   socket.on('user:promote-cohost', (data) => {
     try {
       const { roomId, userId } = data
-      const hostId = socket.id
+      const requesterId = socket.id
 
       if (!roomId || !userId) {
         socket.emit('error', { message: 'Room ID and User ID are required' })
         return
       }
 
-      // Check if requester is the host
-      if (!roomManager.isHostOfRoom(hostId, roomId)) {
+      // Check if requester is the host OR a co-host with permission
+      const room = roomManager.getRoom(roomId)
+      if (!room) {
+        socket.emit('error', { message: 'Room not found' })
+        return
+      }
+
+      // Only the host can promote users (not co-hosts)
+      if (room.hostId !== requesterId) {
         socket.emit('error', { message: 'Only the host can promote users' })
         return
       }
@@ -291,7 +325,7 @@ export function roomHandler(io, socket, roomManager) {
       // Broadcast promotion event to all users in the room
       io.to(roomId).emit('user:promoted-cohost', {
         userId,
-        promotedBy: hostId,
+        promotedBy: requesterId,
       })
 
       // Emit system message
@@ -311,7 +345,7 @@ export function roomHandler(io, socket, roomManager) {
   socket.on('user:demote-cohost', (data) => {
     try {
       const { roomId, userId } = data
-      const hostId = socket.id
+      const requesterId = socket.id
 
       if (!roomId || !userId) {
         socket.emit('error', { message: 'Room ID and User ID are required' })
@@ -319,7 +353,14 @@ export function roomHandler(io, socket, roomManager) {
       }
 
       // Check if requester is the host
-      if (!roomManager.isHostOfRoom(hostId, roomId)) {
+      const room = roomManager.getRoom(roomId)
+      if (!room) {
+        socket.emit('error', { message: 'Room not found' })
+        return
+      }
+
+      // Only the host can demote users
+      if (room.hostId !== requesterId) {
         socket.emit('error', { message: 'Only the host can demote users' })
         return
       }
@@ -338,7 +379,7 @@ export function roomHandler(io, socket, roomManager) {
       // Broadcast demotion event to all users in the room
       io.to(roomId).emit('user:demoted-cohost', {
         userId,
-        demotedBy: hostId,
+        demotedBy: requesterId,
       })
 
       // Emit system message

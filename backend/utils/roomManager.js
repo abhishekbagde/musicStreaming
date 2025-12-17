@@ -296,10 +296,27 @@ class RoomManager {
       this.clearRequestsByUser(roomId, userId)
     }
 
-    // If host leaves, close room
+    // If host leaves, promote a co-host to host instead of closing the room
     if (room.hostId === userId) {
-      delete this.rooms[roomId]
-      return { roomId, closed: true, success: true }
+      if (room.cohosts.length > 0) {
+        // Promote the first co-host to host
+        const newHostId = room.cohosts[0]
+        room.hostId = newHostId
+        room.cohosts = room.cohosts.filter((id) => id !== newHostId)
+        
+        // Update user session to reflect new host status
+        const newHostSession = this.userSessions[newHostId]
+        if (newHostSession) {
+          newHostSession.isHost = true
+        }
+        
+        console.log(`🔄 Co-host ${newHostId} promoted to host in room ${roomId}`)
+        return { roomId, closed: false, success: true, newHostId, hostChanged: true }
+      } else {
+        // No co-hosts, close the room
+        delete this.rooms[roomId]
+        return { roomId, closed: true, success: true }
+      }
     }
 
     return { roomId, closed: false, success: true }

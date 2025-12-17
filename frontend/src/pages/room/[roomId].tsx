@@ -9,6 +9,10 @@ import { MessageReactions } from '@/components/MessageReactions'
 import { apiClient } from '@/utils/apiClient'
 import { loadYouTubeIframeAPI } from '@/utils/youtubeLoader'
 import { reorderList } from '@/utils/queueUtils'
+import { extractVideoId, computeStartSeconds, normalizeParticipant, normalizeParticipantList, generateMessageId, generateTimestamp } from '@/utils/commonHelpers'
+import { createChatMessage, createSystemMessage, initializeMessageReactions, addReaction, removeReaction } from '@/utils/chatHelpers'
+import { updateParticipantRole, promoteToCohost, demoteFromCohost, changeHost } from '@/utils/participantHelpers'
+import { formatParticipantCount, getRoleDisplayText, getRoleIcon } from '@/utils/uiHelpers'
 
 interface Song {
   id: string
@@ -44,37 +48,6 @@ interface Participant {
   role?: 'host' | 'cohost' | 'guest' // 'cohost' = promoted guest
 }
 
-const normalizeParticipant = (participant: Participant): Participant => ({
-  ...participant,
-  role: participant.role || (participant.isHost ? 'host' : 'guest'),
-})
-
-const extractVideoId = (song: Song | null) => {
-  if (!song) return null
-  if (song.id && /^[a-zA-Z0-9_-]{8,15}$/.test(song.id)) {
-    return song.id
-  }
-  if (song.url) {
-    try {
-      const parsed = new URL(song.url)
-      const fromQuery = parsed.searchParams.get('v')
-      if (fromQuery) return fromQuery
-      const segments = parsed.pathname.split('/')
-      const last = segments[segments.length - 1]
-      if (last) return last
-    } catch (err) {
-      console.warn('Failed to parse YouTube URL', err)
-    }
-  }
-  return song.id || null
-}
-
-const computeStartSeconds = (startedAt?: number) => {
-  if (!startedAt) return 0
-  const elapsedMs = Date.now() - startedAt
-  return Math.max(0, Math.floor(elapsedMs / 1000))
-}
-
 export default function RoomPage() {
   // --- Router & Query Params ---
   const router = useRouter()
@@ -89,6 +62,10 @@ export default function RoomPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Song[]>([])
   const [canManageSongs, setCanManageSongs] = useState(false)
+
+  // --- User Permissions ---
+  const [currentUserIsHost, setCurrentUserIsHost] = useState(false)
+  const [currentUserIsCohost, setCurrentUserIsCohost] = useState(false)
 
   // --- Playlist State ---
   const [queue, setQueue] = useState<Song[]>([])
@@ -345,6 +322,14 @@ export default function RoomPage() {
           })
         ) || []
       setParticipants(participantsList)
+      
+      // Update current user's permissions based on the participants list
+      const currentUser = participantsList.find((p: Participant) => p.userId === socket.id)
+      if (currentUser) {
+        setCurrentUserIsHost(currentUser.isHost)
+        setCurrentUserIsCohost(currentUser.role === 'cohost')
+      }
+      
       console.log('👥 Participants:', participantsList.length)
     })
 
@@ -454,6 +439,10 @@ export default function RoomPage() {
           p.userId === data.userId ? { ...p, role: 'cohost' } : p
         )
       )
+      // Update current user's state if they were promoted
+      if (data.userId === socket.id) {
+        setCurrentUserIsCohost(true)
+      }
       console.log('⭐ User promoted to co-host:', data.userId)
     })
 
@@ -464,7 +453,39 @@ export default function RoomPage() {
           p.userId === data.userId ? { ...p, role: 'guest' } : p
         )
       )
+      // Update current user's state if they were demoted
+      if (data.userId === socket.id) {
+        setCurrentUserIsCohost(false)
+      }
       console.log('👤 User demoted from co-host:', data.userId)
+    })
+
+    // Host changed (when previous host left and co-host was promoted)
+    socket.on('host:changed', (data) => {
+      const { newHostId, newHostName } = data
+      
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.userId === newHostId
+            ? { ...p, isHost: true, role: 'host' }
+            : { ...p, isHost: false }
+        )
+      )
+      
+      // Update current user's state if they became the new host
+      if (newHostId === socket.id) {
+        setCurrentUserIsHost(true)
+        setCurrentUserIsCohost(false)
+      } else {
+        setCurrentUserIsHost(false)
+      }
+      
+      // Request updated participants list to ensure all data is current
+      if (currentRoomId) {
+        socket.emit('participants:list', { roomId: currentRoomId })
+      }
+      
+      console.log('👑 Host changed to:', newHostName)
     })
 
     // Cleanup
@@ -483,6 +504,7 @@ export default function RoomPage() {
       socket.off('room:closed')
       socket.off('user:promoted-cohost')
       socket.off('user:demoted-cohost')
+      socket.off('host:changed')
     }
   }, [currentRoomId, router])
 
@@ -677,6 +699,22 @@ export default function RoomPage() {
     setDragOverIndex(null)
     dragSongIndexRef.current = null
   }, [])
+
+  const handlePromoteUser = useCallback(
+    (userId: string) => {
+      if (!currentRoomId || !currentUserIsHost) return
+      socket.emit('user:promote-cohost', { roomId: currentRoomId, userId })
+    },
+    [currentRoomId, currentUserIsHost]
+  )
+
+  const handleDemoteUser = useCallback(
+    (userId: string) => {
+      if (!currentRoomId || !currentUserIsHost) return
+      socket.emit('user:demote-cohost', { roomId: currentRoomId, userId })
+    },
+    [currentRoomId, currentUserIsHost]
+  )
 
   const handleApproveRequest = useCallback(
     (requestId: string) => {
@@ -1076,24 +1114,57 @@ export default function RoomPage() {
               👥 Participants ({participants.length})
             </h2>
             <div className="space-y-2">
-              {participants.map((p) => (
-                <div
-                  key={p.userId}
-                  className="bg-white/10 text-white px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm border border-white/10 flex items-center justify-between gap-2"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span>
-                      {p.isHost ? '🎤' : p.role === 'cohost' ? '⭐' : '👥'}
-                    </span>
-                    <span className="truncate">{p.username}</span>
-                    {p.role === 'cohost' && (
-                      <span className="text-xs bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded whitespace-nowrap">
-                        Co-Host
+              {participants.map((p) => {
+                const canManageUser = currentUserIsHost && p.userId !== currentUserId
+                const isCohost = p.role === 'cohost'
+                
+                return (
+                  <div
+                    key={p.userId}
+                    className="bg-white/10 text-white px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm border border-white/10 flex items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span>{p.isHost ? '🎤' : p.role === 'cohost' ? '⭐' : '👥'}</span>
+                      <span className="truncate">{p.username}</span>
+                      <span className="text-[11px] text-white/50 whitespace-nowrap">
+                        ({p.isHost ? 'Host' : p.role === 'cohost' ? 'Co-Host' : 'Guest'})
                       </span>
+                      {p.isHost && (
+                        <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded whitespace-nowrap">
+                          Host
+                        </span>
+                      )}
+                      {p.role === 'cohost' && (
+                        <span className="text-xs bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded whitespace-nowrap">
+                          Co-Host
+                        </span>
+                      )}
+                    </div>
+
+                    {canManageUser && (
+                      <div className="flex gap-1 flex-shrink-0">
+                        {!isCohost ? (
+                          <button
+                            onClick={() => handlePromoteUser(p.userId)}
+                            className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 px-2 py-1 rounded text-xs transition"
+                            title="Promote to Co-Host"
+                          >
+                            ⭐
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleDemoteUser(p.userId)}
+                            className="bg-slate-500/20 hover:bg-slate-500/30 text-slate-200 px-2 py-1 rounded text-xs transition"
+                            title="Demote from Co-Host"
+                          >
+                            👥
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>

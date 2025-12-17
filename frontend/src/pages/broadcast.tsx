@@ -8,6 +8,10 @@ import { useHeartbeat } from '@/hooks/useHeartbeat'
 import { EmojiPickerButton } from '@/components/EmojiPickerButton'
 import { MessageReactions } from '@/components/MessageReactions'
 import { reorderList } from '@/utils/queueUtils'
+import { extractVideoId, computeStartSeconds, normalizeParticipant, normalizeParticipantList, generateMessageId, generateTimestamp } from '@/utils/commonHelpers'
+import { createChatMessage, createSystemMessage, initializeMessageReactions, addReaction, removeReaction } from '@/utils/chatHelpers'
+import { updateParticipantRole, promoteToCohost, demoteFromCohost, changeHost } from '@/utils/participantHelpers'
+import { formatParticipantCount, getRoleDisplayText, getRoleIcon } from '@/utils/uiHelpers'
 
 interface Song {
   id: string
@@ -42,38 +46,7 @@ interface Participant {
   role?: 'host' | 'cohost' | 'guest' // 'cohost' = promoted guest
 }
 
-const normalizeParticipant = (participant: Participant): Participant => ({
-  ...participant,
-  role: participant.role || (participant.isHost ? 'host' : 'guest'),
-})
-
 const HOST_NAME_STORAGE_KEY = 'musicstreaming_host_name'
-
-const extractVideoId = (song: Song | null) => {
-  if (!song) return null
-  if (song.id && /^[a-zA-Z0-9_-]{8,15}$/.test(song.id)) {
-    return song.id
-  }
-  if (song.url) {
-    try {
-      const parsed = new URL(song.url)
-      const fromQuery = parsed.searchParams.get('v')
-      if (fromQuery) return fromQuery
-      const segments = parsed.pathname.split('/')
-      const last = segments[segments.length - 1]
-      if (last) return last
-    } catch (err) {
-      console.warn('Failed to parse YouTube URL', err)
-    }
-  }
-  return song.id || null
-}
-
-const computeStartSeconds = (startedAt?: number) => {
-  if (!startedAt) return 0
-  const elapsedMs = Date.now() - startedAt
-  return Math.max(0, Math.floor(elapsedMs / 1000))
-}
 
 export default function BroadcastPage() {
   // --- Room State ---
@@ -461,6 +434,19 @@ export default function BroadcastPage() {
       )
     })
 
+    // Host changed (when previous host left and co-host was promoted)
+    socket.on('host:changed', (data) => {
+      const { newHostId, newHostName } = data
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.userId === newHostId
+            ? { ...p, isHost: true, role: 'host' }
+            : { ...p, isHost: false }
+        )
+      )
+      console.log('👑 Host changed to:', newHostName)
+    })
+
     return () => {
       socket.off('room:created')
       socket.off('room:rejoined')
@@ -475,6 +461,7 @@ export default function BroadcastPage() {
       socket.off('error')
       socket.off('user:promoted-cohost')
       socket.off('user:demoted-cohost')
+      socket.off('host:changed')
     }
   }, [flushPendingPlayback, applyReactionUpdate])
 

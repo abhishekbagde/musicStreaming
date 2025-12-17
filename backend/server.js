@@ -101,19 +101,44 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`)
     const session = roomManager.getUserSession(socket.id)
-    if (session) {
-      const { roomId } = session
-      const result = roomManager.removeUserFromRoom(socket.id)
-      
-      if (result?.closed) {
-        // Room closed because host disconnected
-        io.to(roomId).emit('room:closed', { message: 'Host disconnected' })
-      } else if (result?.roomId) {
-        // Notify others that this user left
-        io.to(roomId).emit('user:left', {
-          userId: socket.id,
-        })
-      }
+    if (!session) return
+
+    const { roomId, username = 'Unknown' } = session
+    const result = roomManager.removeUserFromRoom(socket.id)
+    if (!result) return
+
+    const roomChannel = io.to(roomId)
+    const room = roomManager.getRoom(roomId)
+    const participantCount = room?.participants.length ?? 0
+
+    if (result.closed) {
+      roomChannel.emit('room:closed', { message: 'Host disconnected' })
+      return
+    }
+
+    // Notify participants about the disconnect
+    roomChannel.emit('user:left', {
+      userId: socket.id,
+      participantCount,
+    })
+    roomChannel.emit('system:message', {
+      message: `👋 ${username} left the room`,
+      timestamp: new Date().toISOString(),
+    })
+
+    if (result.hostChanged && result.newHostId) {
+      const newHostSession = roomManager.getUserSession(result.newHostId)
+      const newHostName = newHostSession?.username || 'New Host'
+
+      roomChannel.emit('system:message', {
+        message: `👑 ${newHostName} is now the host`,
+        timestamp: new Date().toISOString(),
+      })
+
+      roomChannel.emit('host:changed', {
+        newHostId: result.newHostId,
+        newHostName,
+      })
     }
   })
 })
