@@ -1,6 +1,6 @@
 import React from 'react'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
-import BroadcastPage from '../broadcast'
+import BroadcastPage from '@/pages/broadcast'
 
 const mockPush = jest.fn()
 const emittedEvents: any[] = []
