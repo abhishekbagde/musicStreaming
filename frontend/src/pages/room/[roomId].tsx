@@ -1129,16 +1129,6 @@ export default function RoomPage() {
                       <span className="text-[11px] text-white/50 whitespace-nowrap">
                         ({p.isHost ? 'Host' : p.role === 'cohost' ? 'Co-Host' : 'Guest'})
                       </span>
-                      {p.isHost && (
-                        <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded whitespace-nowrap">
-                          Host
-                        </span>
-                      )}
-                      {p.role === 'cohost' && (
-                        <span className="text-xs bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded whitespace-nowrap">
-                          Co-Host
-                        </span>
-                      )}
                     </div>
 
                     {canManageUser && (
