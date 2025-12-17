@@ -1181,11 +1181,6 @@ export default function BroadcastPage() {
                     <span className="text-[11px] text-white/50 whitespace-nowrap">
                       ({roleLabelForParticipant(p)})
                     </span>
-                    {p.role === 'cohost' && (
-                      <span className="text-xs bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded whitespace-nowrap">
-                        Co-Host
-                      </span>
-                    )}
                       </div>
                       {isHost && !p.isHost && (
                         <div className="flex gap-1 flex-shrink-0">
